@@ -83,6 +83,7 @@ export class SettingsTab extends PluginSettingTab {
     // This avoids the issue where someone has synced the settings from another device,
     // but since the plugin has already been loaded, the new settings do not show up.
     await this.lazyPlugin.loadSettings()
+    this.pluginSettings = this.lazyPlugin.settings.plugins
 
     this.buildDom()
   }
