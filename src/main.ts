@@ -9,6 +9,7 @@ import {
   PluginMode,
   SettingsTab
 } from './settings'
+import { ProgressDialog } from './progress'
 
 const lazyPluginId = require('../manifest.json').id
 
@@ -235,6 +236,10 @@ export default class LazyPlugin extends Plugin {
       await this.obsidianPlugins.enablePlugin(pluginId)
     }
 
+    if (!this.obsidianPlugins.plugins?.[pluginId]?._loaded) {
+      await this.waitForPluginLoaded(pluginId)
+    }
+
     const commands = Object.values(this.obsidianCommands.commands) as CachedCommand[]
     const pluginCommands = commands
       .filter(command => this.getCommandPluginId(command.id) === pluginId)
@@ -257,13 +262,13 @@ export default class LazyPlugin extends Plugin {
     return this.manifests.some(plugin => plugin.id === prefix) ? prefix : null
   }
 
-  async applyStartupPolicy () {
+  async applyStartupPolicy (showProgress = false) {
     if (this.startupPolicyLock) {
       this.startupPolicyPending = true
       await this.startupPolicyLock
       if (this.startupPolicyPending) {
         this.startupPolicyPending = false
-        await this.applyStartupPolicy()
+        await this.applyStartupPolicy(showProgress)
       }
       return
     }
@@ -290,8 +295,25 @@ export default class LazyPlugin extends Plugin {
 
       await this.writeCommunityPluginsFile([...desiredEnabled].sort((a, b) => a.localeCompare(b)))
 
-      for (const plugin of this.manifests) {
-        await this.applyPluginState(plugin.id)
+      let progress: ProgressDialog | null = null
+      if (showProgress) {
+        progress = new ProgressDialog(this.app, {
+          title: 'Applying plugin startup policy',
+          total: this.manifests.length
+        })
+        progress.open()
+      }
+
+      try {
+        let index = 0
+        for (const plugin of this.manifests) {
+          index += 1
+          progress?.setStatus(`Applying ${plugin.name}`)
+          progress?.setProgress(index)
+          await this.applyPluginState(plugin.id)
+        }
+      } finally {
+        progress?.close()
       }
     }
 
@@ -304,7 +326,7 @@ export default class LazyPlugin extends Plugin {
 
     if (this.startupPolicyPending) {
       this.startupPolicyPending = false
-      await this.applyStartupPolicy()
+      await this.applyStartupPolicy(showProgress)
     }
   }
 
@@ -313,6 +335,7 @@ export default class LazyPlugin extends Plugin {
     if (mode === 'keepEnabled') {
       if (!this.obsidianPlugins.enabledPlugins.has(pluginId)) {
         await this.obsidianPlugins.enablePlugin(pluginId)
+        await this.waitForPluginLoaded(pluginId)
       }
       this.removeCachedCommandsForPlugin(pluginId)
       return
@@ -415,6 +438,8 @@ export default class LazyPlugin extends Plugin {
       if (!this.obsidianPlugins.enabledPlugins.has(cached.pluginId) || !isLoaded) {
         this.removeCachedCommandsForPlugin(cached.pluginId)
         await this.obsidianPlugins.enablePlugin(cached.pluginId)
+        const loaded = await this.waitForPluginLoaded(cached.pluginId)
+        if (!loaded) return
         const ready = await this.waitForCommand(cached.id)
         if (!ready) return
       }
@@ -469,6 +494,31 @@ export default class LazyPlugin extends Plugin {
         cleanup()
         resolve(false)
       }, timeoutMs)
+    })
+  }
+
+  async waitForPluginLoaded (pluginId: string, timeoutMs = 8000): Promise<boolean> {
+    const isLoaded = () => Boolean(this.obsidianPlugins.plugins?.[pluginId]?._loaded)
+    if (isLoaded()) return true
+
+    return await new Promise<boolean>(resolve => {
+      const startedAt = Date.now()
+      let timeoutId: number | null = null
+
+      const check = () => {
+        if (isLoaded()) {
+          if (timeoutId) window.clearTimeout(timeoutId)
+          resolve(true)
+          return
+        }
+        if (Date.now() - startedAt >= timeoutMs) {
+          resolve(false)
+          return
+        }
+        timeoutId = window.setTimeout(check, 100)
+      }
+
+      check()
     })
   }
 

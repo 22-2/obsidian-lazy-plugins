@@ -1,4 +1,4 @@
-import { App, DropdownComponent, PluginSettingTab, Setting } from 'obsidian'
+import { App, ButtonComponent, DropdownComponent, PluginSettingTab, Setting } from 'obsidian'
 import LazyPlugin from './main'
 
 export interface PluginSettings {
@@ -64,6 +64,8 @@ export class SettingsTab extends PluginSettingTab {
   containerEl: HTMLElement
   pluginListContainer: HTMLElement
   pluginSettings: { [pluginId: string]: PluginSettings } = {}
+  pendingPluginIds = new Set<string>()
+  applyButton?: ButtonComponent
 
   constructor (app: App, plugin: LazyPlugin) {
     super(app, plugin)
@@ -84,6 +86,7 @@ export class SettingsTab extends PluginSettingTab {
     // but since the plugin has already been loaded, the new settings do not show up.
     await this.lazyPlugin.loadSettings()
     this.pluginSettings = this.lazyPlugin.settings.plugins
+    this.pendingPluginIds.clear()
 
     this.buildDom()
   }
@@ -93,7 +96,7 @@ export class SettingsTab extends PluginSettingTab {
    */
   buildDom () {
     this.containerEl.empty()
-    this.dropdowns = [];
+    this.dropdowns = []
 
     new Setting(this.containerEl)
       .setName('Separate desktop/mobile configuration')
@@ -145,16 +148,32 @@ export class SettingsTab extends PluginSettingTab {
         dropdown.addOption('', 'Set all plugins to be:')
         this.addModeOptions(dropdown)
         dropdown.onChange(async (value: PluginMode) => {
-          // Update all plugins and save the config, but don't reload the plugins (would slow the UI down)
+          // Update all plugins and defer apply until user confirms
           this.lazyPlugin.manifests.forEach(plugin => {
             this.pluginSettings[plugin.id] = { mode: value, userConfigured: true }
+            this.pendingPluginIds.add(plugin.id)
           })
           // Update all the dropdowns
           this.dropdowns.forEach(dropdown => dropdown.setValue(value))
           dropdown.setValue('')
-          await this.lazyPlugin.saveSettings()
-          await this.lazyPlugin.applyStartupPolicy()
+          this.updateApplyButton()
         })
+      })
+
+    new Setting(this.containerEl)
+      .setName('Apply pending changes')
+      .setDesc('Plugin mode changes are queued until you apply them.')
+      .addButton(button => {
+        this.applyButton = button
+        button.setButtonText('Apply changes')
+        button.onClick(async () => {
+          if (this.pendingPluginIds.size === 0) return
+          await this.lazyPlugin.saveSettings()
+          await this.lazyPlugin.applyStartupPolicy(true)
+          this.pendingPluginIds.clear()
+          this.updateApplyButton()
+        })
+        this.updateApplyButton()
       })
 
     // Add the filter buttons
@@ -201,8 +220,10 @@ export class SettingsTab extends PluginSettingTab {
             dropdown
               .setValue(currentValue)
               .onChange(async (value: PluginMode) => {
-                // Update the config file, and enable/disable the plugin if needed
-                await this.lazyPlugin.updatePluginSettings(plugin.id, value)
+                // Update the config, and defer apply until user confirms
+                this.pluginSettings[plugin.id] = { mode: value, userConfigured: true }
+                this.pendingPluginIds.add(plugin.id)
+                this.updateApplyButton()
               })
           })
           .then(setting => {
@@ -234,5 +255,12 @@ export class SettingsTab extends PluginSettingTab {
       this.filterMethod = value
       this.buildPluginList()
     }
+  }
+
+  updateApplyButton () {
+    if (!this.applyButton) return
+    const count = this.pendingPluginIds.size
+    this.applyButton.setDisabled(count === 0)
+    this.applyButton.setButtonText(count === 0 ? 'Apply changes' : `Apply changes (${count})`)
   }
 }
