@@ -379,10 +379,7 @@ export default class LazyPlugin extends Plugin {
 
       await new Promise<void>(resolve => {
         queueMicrotask(() => {
-          const executed = this.executeCommandDirect(cached.id)
-          if (!executed && this.data.showConsoleLog) {
-            console.warn(`Lazy command did not execute: ${cached.id}`)
-          }
+          this.executeCommandDirect(cached.id)
           resolve()
         })
       })
@@ -396,17 +393,37 @@ export default class LazyPlugin extends Plugin {
   }
 
   async waitForCommand (commandId: string, timeoutMs = 8000): Promise<boolean> {
-    const start = Date.now()
-    while (Date.now() - start < timeoutMs) {
-      const cmd = this.obsidianCommands.commands[commandId]
-      if (cmd && (cmd.callback || cmd.checkCallback || cmd.editorCallback || cmd.editorCheckCallback)) return true
-      await this.sleep(50)
-    }
-    return false
-  }
+    if (this.isCommandExecutable(commandId)) return true
 
-  async sleep (ms: number) {
-    await new Promise(resolve => setTimeout(resolve, ms))
+    return await new Promise<boolean>(resolve => {
+      const viewRegistry = (this.app as unknown as { viewRegistry?: any }).viewRegistry
+      let done = false
+
+      const cleanup = () => {
+        if (done) return
+        done = true
+        if (viewRegistry?.off) viewRegistry.off('view-registered', onEvent)
+        if (this.app.workspace?.off) this.app.workspace.off('layout-change', onEvent)
+        if (timeoutId) window.clearTimeout(timeoutId)
+      }
+
+      const onEvent = () => {
+        if (this.isCommandExecutable(commandId)) {
+          cleanup()
+          resolve(true)
+        }
+      }
+
+      if (viewRegistry?.on) viewRegistry.on('view-registered', onEvent)
+      if (this.app.workspace?.on) this.app.workspace.on('layout-change', onEvent)
+
+      queueMicrotask(onEvent)
+
+      const timeoutId = window.setTimeout(() => {
+        cleanup()
+        resolve(false)
+      }, timeoutMs)
+    })
   }
 
   executeCommandDirect (commandId: string): boolean {
@@ -423,27 +440,47 @@ export default class LazyPlugin extends Plugin {
     const editor = view?.editor
     const file = view?.file
 
-    if (editor && command.editorCheckCallback) {
+    if (editor && typeof command.editorCheckCallback === 'function') {
       const ok = command.editorCheckCallback(true, editor, file)
-      return ok !== false
+      if (ok === false) return false
+      command.editorCheckCallback(false, editor, file)
+      return true
     }
 
-    if (editor && command.editorCallback) {
+    if (editor && typeof command.editorCallback === 'function') {
       command.editorCallback(editor, file)
       return true
     }
 
-    if (command.checkCallback) {
+    if (typeof command.checkCallback === 'function') {
       const ok = command.checkCallback(true)
-      return ok !== false
+      if (ok === false) return false
+      command.checkCallback(false)
+      return true
     }
 
-    if (command.callback) {
+    if (typeof command.callback === 'function') {
       command.callback()
       return true
     }
 
     return false
+  }
+
+  isCommandExecutable (commandId: string): boolean {
+    const command = this.obsidianCommands.commands[commandId] as {
+      callback?: () => void
+      checkCallback?: (checking: boolean) => boolean | void
+      editorCallback?: (editor: Editor, ctx?: unknown) => void
+      editorCheckCallback?: (checking: boolean, editor: Editor, ctx?: unknown) => boolean | void
+    } | undefined
+
+    if (!command) return false
+
+    return typeof command.callback === 'function' ||
+      typeof command.checkCallback === 'function' ||
+      typeof command.editorCallback === 'function' ||
+      typeof command.editorCheckCallback === 'function'
   }
 
   async loadCachedCommandsFromData () {
