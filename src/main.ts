@@ -139,7 +139,6 @@ export default class OnDemandPlugin extends Plugin {
             pluginId,
         );
         if (!loaded) return;
-        console.log("rebuilding leaf view for lazyOnView plugin:", pluginId);
 
         // Force a view reconstruction after a lazy plugin is loaded, ensuring the view is properly initialized.
         await rebuildLeafView(leaf);
