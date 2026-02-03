@@ -2,6 +2,7 @@ import { App, Editor, MarkdownView } from "obsidian";
 import log from "loglevel";
 import { LazySettings } from "../settings";
 import { CachedCommand } from "./command-cache-service";
+import { ViewRegistry } from "obsidian-typings";
 
 const logger = log.getLogger("OnDemandPlugin/LazyCommandRunner");
 
@@ -92,7 +93,7 @@ export class LazyCommandRunner {
 
         return await new Promise<boolean>((resolve) => {
             const viewRegistry = (
-                this.deps.app as unknown as { viewRegistry?: any }
+                this.deps.app as unknown as { viewRegistry?: ViewRegistry }
             ).viewRegistry;
             let done = false;
 

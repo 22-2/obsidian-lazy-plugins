@@ -3,6 +3,7 @@ import log from "loglevel";
 import { ProgressDialog } from "../progress";
 import { ON_DEMAND_PLUGIN_ID } from "../constants";
 import { PluginMode } from "../settings";
+import { Commands, Plugins } from "obsidian-typings";
 
 const logger = log.getLogger("OnDemandPlugin/StartupPolicyService");
 
@@ -99,8 +100,8 @@ export class StartupPolicyService {
                     creator: unknown,
                 ) => {
                     const loadingPluginId = (
-                        this.deps.app as unknown as { plugins?: any }
-                    )?.plugins?.loadingPluginId as string | undefined;
+                        this.deps.app as unknown as { plugins: Plugins }
+                    ).plugins.loadingPluginId as string | undefined;
 
                     if (
                         loadingPluginId &&
@@ -176,12 +177,10 @@ export class StartupPolicyService {
                         const pluginIds = lazyManifests.map(
                             (plugin) => plugin.id,
                         );
-                        await this.waitForAllPluginsLoaded(pluginIds, 60000);
+                        await this.waitForAllPluginsLoaded(pluginIds, 1000 * 15);
                         progress?.setProgress(lazyManifests.length + 1);
 
-                        await new Promise<void>((resolve) => {
-                            window.setTimeout(() => resolve(), 2500);
-                        });
+                        await sleep(1500);
                     }
 
                     if (!cancelled) {
@@ -225,8 +224,8 @@ export class StartupPolicyService {
                 if (showProgress && !cancelled) {
                     try {
                         await (
-                            this.deps.app as any
-                        )?.commands?.executeCommandById?.("app:reload");
+                            this.deps.app as unknown as { commands: Commands }
+                        ).commands.executeCommandById("app:reload");
                     } catch (error) {
                         logger.warn("Failed to reload app after apply", error);
                     }
@@ -250,7 +249,7 @@ export class StartupPolicyService {
 
     private async waitForAllPluginsLoaded(
         pluginIds: string[],
-        timeoutMs = 60000,
+        timeoutMs: number,
     ): Promise<boolean> {
         if (!pluginIds.length) return true;
 
@@ -266,9 +265,7 @@ export class StartupPolicyService {
                 return false;
             }
 
-            await new Promise<void>((resolve) => {
-                window.setTimeout(() => resolve(), 100);
-            });
+            await sleep(100);
         }
     }
 }

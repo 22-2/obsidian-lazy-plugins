@@ -22,9 +22,7 @@ export interface DeviceSettings {
     showDescriptions: boolean;
     reRegisterLazyCommandsOnDisable: boolean;
     plugins: { [pluginId: string]: PluginSettings };
-    lazyOnViews?: Record<string, string[]>;
-
-    [key: string]: any;
+    lazyOnViews: { [pluginId: string]: string[] };
 }
 
 export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {

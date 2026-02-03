@@ -117,12 +117,10 @@ export default class OnDemandPlugin extends Plugin {
                     async function (
                         this: WorkspaceLeaf,
                         viewState: ViewState,
-                        ...args: any[]
                     ) {
                         const result = await next.call(
                             this,
                             viewState,
-                            ...args,
                         );
                         if (viewState?.type) {
                             await plugin.checkViewTypeForLazyLoading(viewState.type);

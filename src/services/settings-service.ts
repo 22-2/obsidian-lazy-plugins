@@ -55,23 +55,10 @@ export class SettingsService {
 
     async migrate() {
         let hasChanges = false;
-        const settings = this.settings as DeviceSettings & {
-            defaultKeepEnabled?: boolean;
-        };
+        const settings = this.settings as DeviceSettings;
 
         if (!settings.plugins) {
             settings.plugins = {};
-            hasChanges = true;
-        }
-
-        if (
-            settings.defaultMode === undefined &&
-            settings.defaultKeepEnabled !== undefined
-        ) {
-            settings.defaultMode = settings.defaultKeepEnabled
-                ? "keepEnabled"
-                : "disabled";
-            delete settings.defaultKeepEnabled;
             hasChanges = true;
         }
 
