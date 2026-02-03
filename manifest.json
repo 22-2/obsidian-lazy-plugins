@@ -5,7 +5,6 @@
 	"minAppVersion": "1.6.0",
 	"description": "Lazy load plugins by caching their commands. Plugins are enabled on-demand when you trigger their commands, reducing startup time.",
 	"author": "Alan Grainger",
-	"authorUrl": "https://github.com/alangrainger",
-	"fundingUrl": "https://ko-fi.com/alan_",
+	"authorUrl": "https://github.com/22-2",
 	"isDesktopOnly": false
 }
