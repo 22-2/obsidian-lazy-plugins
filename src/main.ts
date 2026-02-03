@@ -100,7 +100,8 @@ export default class LazyPlugin extends Plugin {
 
         this.commandCacheService.loadFromData();
         this.patchPluginEnableDisable();
-        await this.initializeCommandCache();
+        // DO NOT CALL THIS HERE TO AVOID UNINTENDED BEHAVIOR ON STARTUP
+        // await this.initializeCommandCache();
         this.patchSetViewState();
     }
 
