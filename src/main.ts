@@ -125,7 +125,7 @@ export default class OnDemandPlugin extends Plugin {
                             ...args,
                         );
                         if (viewState?.type) {
-                            plugin.checkViewTypeForLazyLoading(viewState.type);
+                            await plugin.checkViewTypeForLazyLoading(viewState.type);
                         }
                         return result;
                     },
