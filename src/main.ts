@@ -85,7 +85,9 @@ export default class LazyPlugin extends Plugin {
     this.addSettingTab(new SettingsTab(this.app, this));
 
     this.commandCacheService.loadFromData();
-    await this.initializeCommandCache();
+
+    // DO NOT CALL THIS HERE TO AVOID UNINTENDED BEHAVIOR ON STARTUP
+    // await this.initializeCommandCache();
 
     this.patchSetViewState();
   }
