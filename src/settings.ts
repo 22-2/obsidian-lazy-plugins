@@ -6,7 +6,10 @@ import {
     Setting,
     Notice,
 } from "obsidian";
-import LazyPlugin from "./main";
+import OnDemandPlugin from "./main";
+import log from "loglevel";
+
+const logger = log.getLogger("OnDemandPlugin/SettingsTab");
 
 export interface PluginSettings {
     mode?: PluginMode;
@@ -69,7 +72,7 @@ export const PluginModes: Record<PluginMode, string> = {
 
 export class SettingsTab extends PluginSettingTab {
     app: App;
-    lazyPlugin: LazyPlugin;
+    plugin: OnDemandPlugin;
     dropdowns: DropdownComponent[] = [];
     filterMethod: PluginMode | undefined;
     filterString: string | undefined;
@@ -80,11 +83,11 @@ export class SettingsTab extends PluginSettingTab {
     applyButton?: ButtonComponent;
     resultsCountEl?: HTMLElement;
 
-    constructor(app: App, plugin: LazyPlugin) {
+    constructor(app: App, plugin: OnDemandPlugin) {
         super(app, plugin);
         this.app = app;
-        this.lazyPlugin = plugin;
-        this.pluginSettings = this.lazyPlugin.settings.plugins;
+        this.plugin = plugin;
+        this.pluginSettings = this.plugin.settings.plugins;
     }
 
     async display() {
@@ -92,16 +95,16 @@ export class SettingsTab extends PluginSettingTab {
         this.containerEl = containerEl;
 
         // Update the list of installed plugins
-        this.lazyPlugin.updateManifests();
+        this.plugin.updateManifests();
 
         // Load the settings from disk when the settings modal is displayed.
         // This avoids the issue where someone has synced the settings from another device,
         // but since the plugin has already been loaded, the new settings do not show up.
-        await this.lazyPlugin.loadSettings();
-        this.pluginSettings = this.lazyPlugin.settings.plugins;
+        await this.plugin.loadSettings();
+        this.pluginSettings = this.plugin.settings.plugins;
         
         // Set initial configuration for any newly installed plugins
-        await this.lazyPlugin.setInitialPluginsConfiguration();
+        await this.plugin.setInitialPluginsConfiguration();
         
         this.pendingPluginIds.clear();
 
@@ -119,16 +122,16 @@ export class SettingsTab extends PluginSettingTab {
             .setName("Separate desktop/mobile configuration")
             .setDesc(
                 "Enable this if you want to have different settings depending whether you're using a desktop or mobile device. " +
-                    `All of the settings below can be configured differently on desktop and mobile. You're currently using the ${this.lazyPlugin.device} settings.`,
+                    `All of the settings below can be configured differently on desktop and mobile. You're currently using the ${this.plugin.device} settings.`,
             )
             .addToggle((toggle) => {
                 toggle
-                    .setValue(this.lazyPlugin.data.dualConfigs)
+                    .setValue(this.plugin.data.dualConfigs)
                     .onChange(async (value) => {
-                        this.lazyPlugin.data.dualConfigs = value;
-                        await this.lazyPlugin.saveSettings();
+                        this.plugin.data.dualConfigs = value;
+                        await this.plugin.saveSettings();
                         // Refresh the settings to make sure the mobile section is configured
-                        await this.lazyPlugin.loadSettings();
+                        await this.plugin.loadSettings();
                         this.buildDom();
                     });
             });
@@ -143,11 +146,11 @@ export class SettingsTab extends PluginSettingTab {
                 this.addModeOptions(dropdown);
                 dropdown
                     .setValue(
-                        this.lazyPlugin.settings.defaultMode || "disabled",
+                        this.plugin.settings.defaultMode || "disabled",
                     )
                     .onChange(async (value: PluginMode) => {
-                        this.lazyPlugin.settings.defaultMode = value;
-                        await this.lazyPlugin.saveSettings();
+                        this.plugin.settings.defaultMode = value;
+                        await this.plugin.saveSettings();
                     });
             });
 
@@ -155,11 +158,24 @@ export class SettingsTab extends PluginSettingTab {
             .setName("Show plugin descriptions")
             .addToggle((toggle) => {
                 toggle
-                    .setValue(this.lazyPlugin.settings.showDescriptions)
+                    .setValue(this.plugin.settings.showDescriptions)
                     .onChange(async (value) => {
-                        this.lazyPlugin.settings.showDescriptions = value;
-                        await this.lazyPlugin.saveSettings();
+                        this.plugin.settings.showDescriptions = value;
+                        await this.plugin.saveSettings();
                         this.buildDom();
+                    });
+            });
+
+        new Setting(this.containerEl)
+            .setName("Debug log output")
+            .setDesc("Enable detailed logs for troubleshooting.")
+            .addToggle((toggle) => {
+                toggle
+                    .setValue(this.plugin.data.showConsoleLog)
+                    .onChange(async (value) => {
+                        this.plugin.data.showConsoleLog = value;
+                        await this.plugin.saveSettings();
+                        this.plugin.configureLogger();
                     });
             });
 
@@ -171,13 +187,13 @@ export class SettingsTab extends PluginSettingTab {
             .addToggle((toggle) => {
                 toggle
                     .setValue(
-                        this.lazyPlugin.settings
+                        this.plugin.settings
                             .reRegisterLazyCommandsOnDisable,
                     )
                     .onChange(async (value) => {
-                        this.lazyPlugin.settings.reRegisterLazyCommandsOnDisable =
+                        this.plugin.settings.reRegisterLazyCommandsOnDisable =
                             value;
-                        await this.lazyPlugin.saveSettings();
+                        await this.plugin.saveSettings();
                     });
             });
 
@@ -188,7 +204,7 @@ export class SettingsTab extends PluginSettingTab {
         //     this.addModeOptions(dropdown);
         //     dropdown.onChange(async (value: PluginMode) => {
         //       // Update all plugins and defer apply until user confirms
-        //       this.lazyPlugin.manifests.forEach((plugin) => {
+        //       this.onDemandPlugin.manifests.forEach((plugin) => {
         //         this.pluginSettings[plugin.id] = {
         //           mode: value,
         //           userConfigured: true,
@@ -211,8 +227,8 @@ export class SettingsTab extends PluginSettingTab {
                 button.onClick(async () => {
                     if (this.pendingPluginIds.size === 0) return;
                     this.normalizelazyOnViews();
-                    await this.lazyPlugin.saveSettings();
-                    await this.lazyPlugin.applyStartupPolicy(
+                    await this.plugin.saveSettings();
+                    await this.plugin.applyStartupPolicy(
                         true,
                         Array.from(this.pendingPluginIds),
                     );
@@ -230,12 +246,11 @@ export class SettingsTab extends PluginSettingTab {
                 button.onClick(async () => {
                     button.setDisabled(true);
                     try {
-                        await this.lazyPlugin.initializeCommandCache();
+                        await this.plugin.initializeCommandCache();
                         new Notice("Command cache rebuilt");
                     } catch (e) {
                         new Notice("Failed to rebuild command cache");
-                        // eslint-disable-next-line no-console
-                        console.error(e);
+                        logger.error(e);
                     } finally {
                         button.setDisabled(false);
                     }
@@ -281,8 +296,8 @@ export class SettingsTab extends PluginSettingTab {
         this.pluginListContainer.textContent = "";
         let count = 0;
         // Add the delay settings for each installed plugin
-        this.lazyPlugin.manifests.forEach((plugin) => {
-            const currentValue = this.lazyPlugin.getPluginMode(plugin.id);
+        this.plugin.manifests.forEach((plugin) => {
+            const currentValue = this.plugin.getPluginMode(plugin.id);
 
             // Filter the list of plugins if there is a filter specified
             if (this.filterMethod && currentValue !== this.filterMethod) return;
@@ -320,7 +335,7 @@ export class SettingsTab extends PluginSettingTab {
             //     text
             //       .setPlaceholder("view-type-1, view-type-2")
             //       .setValue(
-            //         (this.lazyPlugin.settings.lazyOnViews?.[plugin.id] || []).join(
+            //         (this.onDemandPlugin.settings.lazyOnViews?.[plugin.id] || []).join(
             //           ", ",
             //         ),
             //       )
@@ -329,17 +344,17 @@ export class SettingsTab extends PluginSettingTab {
             //           .split(",")
             //           .map((t) => t.trim())
             //           .filter((t) => t.length > 0);
-            //         if (!this.lazyPlugin.settings.lazyOnViews) {
-            //           this.lazyPlugin.settings.lazyOnViews = {};
+            //         if (!this.onDemandPlugin.settings.lazyOnViews) {
+            //           this.onDemandPlugin.settings.lazyOnViews = {};
             //         }
-            //         this.lazyPlugin.settings.lazyOnViews[plugin.id] = viewTypes;
-            //         await this.lazyPlugin.saveSettings();
+            //         this.onDemandPlugin.settings.lazyOnViews[plugin.id] = viewTypes;
+            //         await this.onDemandPlugin.saveSettings();
             //       });
             //   });
             // }
 
             setting.then((setting) => {
-                if (this.lazyPlugin.settings.showDescriptions) {
+                if (this.plugin.settings.showDescriptions) {
                     // Show or hide the plugin description depending on the user's choice
                     setting.setDesc(plugin.description);
                 }
@@ -352,29 +367,29 @@ export class SettingsTab extends PluginSettingTab {
     }
 
     private ensurelazyOnViewEntry(pluginId: string, mode: PluginMode) {
-        if (!this.lazyPlugin.settings.lazyOnViews) {
-            this.lazyPlugin.settings.lazyOnViews = {};
+        if (!this.plugin.settings.lazyOnViews) {
+            this.plugin.settings.lazyOnViews = {};
         }
         if (mode === "lazyOnView") {
-            if (!this.lazyPlugin.settings.lazyOnViews[pluginId]) {
-                this.lazyPlugin.settings.lazyOnViews[pluginId] = [];
+            if (!this.plugin.settings.lazyOnViews[pluginId]) {
+                this.plugin.settings.lazyOnViews[pluginId] = [];
             }
             return;
         }
 
-        if (this.lazyPlugin.settings.lazyOnViews[pluginId]) {
-            delete this.lazyPlugin.settings.lazyOnViews[pluginId];
+        if (this.plugin.settings.lazyOnViews[pluginId]) {
+            delete this.plugin.settings.lazyOnViews[pluginId];
         }
     }
 
     private normalizelazyOnViews() {
-        if (!this.lazyPlugin.settings.lazyOnViews) {
-            this.lazyPlugin.settings.lazyOnViews = {};
+        if (!this.plugin.settings.lazyOnViews) {
+            this.plugin.settings.lazyOnViews = {};
         }
 
-        const lazyOnViews = this.lazyPlugin.settings.lazyOnViews;
-        this.lazyPlugin.manifests.forEach((plugin) => {
-            const mode = this.lazyPlugin.getPluginMode(plugin.id);
+        const lazyOnViews = this.plugin.settings.lazyOnViews;
+        this.plugin.manifests.forEach((plugin) => {
+            const mode = this.plugin.getPluginMode(plugin.id);
             if (mode === "lazyOnView") {
                 if (!lazyOnViews[plugin.id]) {
                     lazyOnViews[plugin.id] = [];

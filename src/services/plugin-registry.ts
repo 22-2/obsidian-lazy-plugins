@@ -1,5 +1,8 @@
 import { App, Platform, PluginManifest } from "obsidian";
-import { lazyPluginId } from "../constants";
+import log from "loglevel";
+import { onDemandPluginId } from "../constants";
+
+const logger = log.getLogger("OnDemandPlugin/PluginRegistry");
 
 export class PluginRegistry {
     manifests: PluginManifest[] = [];
@@ -24,7 +27,7 @@ export class PluginRegistry {
             .filter(
                 (plugin: PluginManifest) =>
                     // Filter out the Lazy Loader plugin
-                    plugin.id !== lazyPluginId &&
+                    plugin.id !== onDemandPluginId &&
                     // Filter out desktop-only plugins from mobile
                     !(Platform.isMobile && plugin.isDesktopOnly),
             )
@@ -56,7 +59,7 @@ export class PluginRegistry {
             }
         } catch (error) {
             if (showConsoleLog) {
-                console.warn("Failed to read community-plugins.json", error);
+                logger.warn("Failed to read community-plugins.json", error);
             }
         }
     }
@@ -73,7 +76,7 @@ export class PluginRegistry {
             await adapter.write(path, content);
         } catch (error) {
             if (showConsoleLog) {
-                console.error("Failed to write community-plugins.json", error);
+                logger.error("Failed to write community-plugins.json", error);
             }
         }
     }

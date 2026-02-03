@@ -1,7 +1,10 @@
 import { App, PluginManifest } from "obsidian";
+import log from "loglevel";
 import { ProgressDialog } from "../progress";
-import { lazyPluginId } from "../constants";
+import { onDemandPluginId } from "../constants";
 import { PluginMode } from "../settings";
+
+const logger = log.getLogger("OnDemandPlugin/StartupPolicyService");
 
 interface StartupPolicyDeps {
     app: App;
@@ -157,7 +160,7 @@ export class StartupPolicyService {
                                     plugin.id,
                                 );
                             } catch (error) {
-                                console.warn(
+                                logger.warn(
                                     "Failed to load plugin",
                                     plugin.id,
                                     error,
@@ -208,7 +211,7 @@ export class StartupPolicyService {
                         desiredEnabled.add(plugin.id);
                     }
                 });
-                desiredEnabled.add(lazyPluginId);
+                desiredEnabled.add(onDemandPluginId);
 
                 this.deps.obsidianPlugins.enabledPlugins.clear();
                 desiredEnabled.forEach((pluginId) => {
@@ -225,7 +228,7 @@ export class StartupPolicyService {
                             this.deps.app as any
                         )?.commands?.executeCommandById?.("app:reload");
                     } catch (error) {
-                        console.warn("Failed to reload app after apply", error);
+                        logger.warn("Failed to reload app after apply", error);
                     }
                 }
                 progress?.close();

@@ -1,6 +1,9 @@
 import { App, Editor, MarkdownView } from "obsidian";
+import log from "loglevel";
 import { LazySettings } from "../settings";
 import { CachedCommand } from "./command-cache-service";
+
+const logger = log.getLogger("OnDemandPlugin/LazyCommandRunner");
 
 interface LazyCommandRunnerDeps {
     app: App;
@@ -36,7 +39,7 @@ export class LazyCommandRunner {
             if (!ready) return;
 
             if (this.deps.getData().showConsoleLog) {
-                console.log(`Executing lazy command: ${cached.id}`);
+                logger.debug(`Executing lazy command: ${cached.id}`);
             }
 
             await new Promise<void>((resolve) => {
@@ -47,10 +50,7 @@ export class LazyCommandRunner {
             });
         } catch (error) {
             if (this.deps.getData().showConsoleLog) {
-                console.error(
-                    `Error executing lazy command ${commandId}:`,
-                    error,
-                );
+                logger.error(`Error executing lazy command ${commandId}:`, error);
             }
         }
     }
@@ -76,7 +76,7 @@ export class LazyCommandRunner {
             return true;
         } catch (error) {
             if (this.deps.getData().showConsoleLog) {
-                console.error(`Error loading plugin ${pluginId}:`, error);
+                logger.error(`Error loading plugin ${pluginId}:`, error);
             }
             return false;
         } finally {

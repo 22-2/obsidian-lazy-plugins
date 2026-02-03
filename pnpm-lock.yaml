@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      loglevel:
+        specifier: ^1.9.2
+        version: 1.9.2
       monkey-around:
         specifier: ^3.0.0
         version: 3.0.0
@@ -1159,6 +1162,10 @@ packages:
 
   lodash-es@4.17.23:
     resolution: {integrity: sha512-kVI48u3PZr38HdYz98UmfPnXl2DXrpdctLrFLCd3kOx1xUkOmpFPx7gCWWM5MPkL/fD8zb+Ph0QzjGFs4+hHWg==}
+
+  loglevel@1.9.2:
+    resolution: {integrity: sha512-HgMmCqIJSAKqo68l0rS2AanEWfkxaZ5wNiEFb5ggm08lDs9Xl2KxBlX3PTcaD2chBM1gXAYf491/M2Rv8Jwayg==}
+    engines: {node: '>= 0.6.0'}
 
   lowercase-keys@2.0.0:
     resolution: {integrity: sha512-tqNXrS78oMOE73NMxK4EMLQsQowWf8jKooH9g7xPavRT706R6bkQJ6DY2Te7QukaZsulxa30wQ7bk0pm4XiHmA==}
@@ -2589,6 +2596,8 @@ snapshots:
   lodash-es@4.17.21: {}
 
   lodash-es@4.17.23: {}
+
+  loglevel@1.9.2: {}
 
   lowercase-keys@2.0.0: {}
 

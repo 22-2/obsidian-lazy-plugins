@@ -12,8 +12,11 @@ import {
     SettingsTab,
 } from "./settings";
 import { Commands, Plugins } from "obsidian-typings";
+import log, { LogLevelDesc } from "loglevel";
 
-export default class LazyPlugin extends Plugin {
+const logger = log.getLogger("OnDemandPlugin/OnDemandPlugin");
+
+export default class OnDemandPlugin extends Plugin {
     data: LazySettings;
     settings: DeviceSettings;
     device = "desktop/global";
@@ -37,6 +40,7 @@ export default class LazyPlugin extends Plugin {
     async onload() {
         this.settingsService = new SettingsService(this);
         await this.loadSettings();
+        this.configureLogger();
 
         this.registry = new PluginRegistry(this.app, this.obsidianPlugins);
         await this.registry.loadEnabledPluginsFromDisk(
@@ -315,4 +319,22 @@ export default class LazyPlugin extends Plugin {
         }
         this.commandCacheService.removeCachedCommandsForPlugin(pluginId);
     }
+
+    configureLogger(): void {
+        const level = this.data.showConsoleLog ? "debug" : "error";
+        toggleLoggerBy(level, (name) => name.startsWith("OnDemandPlugin/"));
+        logger.debug("Debug mode enabled");
+    }
+}
+
+export function toggleLoggerBy(
+	level: LogLevelDesc,
+	filter: (name: string) => boolean = () => true
+): void {
+    Object.values(log.getLoggers())
+    // @ts-expect-error - loglevel types don't expose name property
+		.filter((logger) => filter(logger.name))
+		.forEach((logger) => {
+			logger.setLevel(level);
+		});
 }

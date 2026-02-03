@@ -1,1 +1,1 @@
-export const lazyPluginId = require("../manifest.json").id;
+export const onDemandPluginId = require("../manifest.json").id;
