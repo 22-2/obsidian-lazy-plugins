@@ -124,7 +124,12 @@ export default class LazyPlugin extends Plugin {
                 async function (this: Plugins, pluginId: string) {
                   const result = await next.call(this, pluginId);
                   const mode = plugin.getPluginMode(pluginId);
-                  if (mode === "lazy" || mode === "lazyWithView") {
+                  const shouldReRegister =
+                    plugin.settings.reRegisterLazyCommandsOnDisable ?? true;
+                  if (
+                    shouldReRegister &&
+                    (mode === "lazy" || mode === "lazyWithView")
+                  ) {
                     await plugin.commandCacheService.ensureCommandsCached(
                       pluginId,
                     );

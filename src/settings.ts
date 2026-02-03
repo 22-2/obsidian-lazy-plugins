@@ -17,6 +17,7 @@ export interface PluginSettings {
 export interface DeviceSettings {
   defaultMode: PluginMode;
   showDescriptions: boolean;
+  reRegisterLazyCommandsOnDisable: boolean;
   plugins: { [pluginId: string]: PluginSettings };
   lazyWithViews?: Record<string, string[]>;
 
@@ -26,6 +27,7 @@ export interface DeviceSettings {
 export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
   defaultMode: "disabled",
   showDescriptions: true,
+  reRegisterLazyCommandsOnDisable: true,
   plugins: {},
   lazyWithViews: {},
 };
@@ -149,6 +151,20 @@ export class SettingsTab extends PluginSettingTab {
             this.lazyPlugin.settings.showDescriptions = value;
             await this.lazyPlugin.saveSettings();
             this.buildDom();
+          });
+      });
+
+    new Setting(this.containerEl)
+      .setName("Re-register lazy commands on disable")
+      .setDesc(
+        "When a lazy plugin is manually disabled, re-register its cached command wrappers so the commands remain available.",
+      )
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.lazyPlugin.settings.reRegisterLazyCommandsOnDisable)
+          .onChange(async (value) => {
+            this.lazyPlugin.settings.reRegisterLazyCommandsOnDisable = value;
+            await this.lazyPlugin.saveSettings();
           });
       });
 
