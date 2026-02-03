@@ -28,22 +28,12 @@ export class LazyCommandRunner {
     const cached = this.deps.getCachedCommand(commandId);
     if (!cached) return;
 
-    if (this.inFlightPlugins.has(cached.pluginId)) return;
-    this.inFlightPlugins.add(cached.pluginId);
+    const success = await this.ensurePluginLoaded(cached.pluginId);
+    if (!success) return;
 
     try {
-      const isLoaded = this.deps.obsidianPlugins.plugins?.[cached.pluginId]?._loaded;
-      if (
-        !this.deps.obsidianPlugins.enabledPlugins.has(cached.pluginId) ||
-        !isLoaded
-      ) {
-        this.deps.removeCachedCommandsForPlugin(cached.pluginId);
-        await this.deps.obsidianPlugins.enablePlugin(cached.pluginId);
-        const loaded = await this.waitForPluginLoaded(cached.pluginId);
-        if (!loaded) return;
-        const ready = await this.waitForCommand(cached.id);
-        if (!ready) return;
-      }
+      const ready = await this.waitForCommand(cached.id);
+      if (!ready) return;
 
       if (this.deps.getData().showConsoleLog) {
         console.log(`Executing lazy command: ${cached.id}`);
@@ -59,8 +49,35 @@ export class LazyCommandRunner {
       if (this.deps.getData().showConsoleLog) {
         console.error(`Error executing lazy command ${commandId}:`, error);
       }
+    }
+  }
+
+  async ensurePluginLoaded(pluginId: string): Promise<boolean> {
+    if (this.inFlightPlugins.has(pluginId)) {
+      return await this.waitForPluginLoaded(pluginId);
+    }
+    this.inFlightPlugins.add(pluginId);
+
+    try {
+      const isLoaded =
+        this.deps.obsidianPlugins.plugins?.[pluginId]?._loaded;
+      if (
+        !this.deps.obsidianPlugins.enabledPlugins.has(pluginId) ||
+        !isLoaded
+      ) {
+        this.deps.removeCachedCommandsForPlugin(pluginId);
+        await this.deps.obsidianPlugins.enablePlugin(pluginId);
+        const loaded = await this.waitForPluginLoaded(pluginId);
+        if (!loaded) return false;
+      }
+      return true;
+    } catch (error) {
+      if (this.deps.getData().showConsoleLog) {
+        console.error(`Error loading plugin ${pluginId}:`, error);
+      }
+      return false;
     } finally {
-      this.inFlightPlugins.delete(cached.pluginId);
+      this.inFlightPlugins.delete(pluginId);
     }
   }
 
