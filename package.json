@@ -12,6 +12,9 @@
 	"keywords": [],
 	"author": "",
 	"license": "MIT",
+	"dependencies": {
+		"monkey-around": "^3.0.0"
+	},
 	"devDependencies": {
 		"@types/node": "^25.2.0",
 		"builtin-modules": "5.0.0",

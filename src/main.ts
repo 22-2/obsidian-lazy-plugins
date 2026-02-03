@@ -1,4 +1,5 @@
 import { Plugin, PluginManifest, WorkspaceLeaf, ViewState } from "obsidian";
+import { around } from "monkey-around";
 import { CommandCacheService } from "./services/command-cache-service";
 import { LazyCommandRunner } from "./services/lazy-command-runner";
 import { PluginRegistry } from "./services/plugin-registry";
@@ -91,23 +92,18 @@ export default class LazyPlugin extends Plugin {
 
   private patchSetViewState() {
     const plugin = this;
-    const leafPrototype = WorkspaceLeaf.prototype as any;
-    const originalSetViewState = leafPrototype.setViewState;
 
-    leafPrototype.setViewState = async function (
-      viewState: ViewState,
-      ...args: any[]
-    ) {
-      const result = await originalSetViewState.apply(this, [viewState, ...args]);
-      if (viewState?.type) {
-        plugin.checkViewTypeForLazyLoading(viewState.type);
-      }
-      return result;
-    };
-
-    this.register(() => {
-      leafPrototype.setViewState = originalSetViewState;
-    });
+    this.register(
+      around(WorkspaceLeaf.prototype, {
+        setViewState: (next: WorkspaceLeaf["setViewState"]) => async function (this: WorkspaceLeaf, viewState: ViewState, ...args: any[]) {
+          const result = await next.call(this, viewState, ...args);
+          if (viewState?.type) {
+            plugin.checkViewTypeForLazyLoading(viewState.type);
+          }
+          return result;
+        },
+      })
+    );
   }
 
   async checkViewTypeForLazyLoading(viewType: string) {
