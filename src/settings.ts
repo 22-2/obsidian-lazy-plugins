@@ -17,6 +17,7 @@ export interface DeviceSettings {
   defaultMode: PluginMode;
   showDescriptions: boolean;
   plugins: { [pluginId: string]: PluginSettings };
+  lazyWithViews?: Record<string, string[]>;
 
   [key: string]: any;
 }
@@ -25,6 +26,7 @@ export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
   defaultMode: "disabled",
   showDescriptions: true,
   plugins: {},
+  lazyWithViews: {},
 };
 
 // Global settings for the plugin
@@ -53,11 +55,12 @@ export interface CachedCommandEntry {
 export type CommandCache = Record<string, CachedCommandEntry[]>;
 export type CommandCacheVersions = Record<string, string>;
 
-export type PluginMode = "disabled" | "lazy" | "keepEnabled";
+export type PluginMode = "disabled" | "lazy" | "keepEnabled" | "lazyWithView";
 
 export const PluginModes: Record<PluginMode, string> = {
   disabled: "⛔ Disabled",
   lazy: "💤 Lazy (cache commands)",
+  lazyWithView: "🖼️ Lazy with View",
   keepEnabled: "✅ Keep enabled",
 };
 
@@ -177,6 +180,7 @@ export class SettingsTab extends PluginSettingTab {
         button.setButtonText("Apply changes");
         button.onClick(async () => {
           if (this.pendingPluginIds.size === 0) return;
+          this.normalizeLazyWithViews();
           await this.lazyPlugin.saveSettings();
           await this.lazyPlugin.applyStartupPolicy(true);
           this.pendingPluginIds.clear();
@@ -229,7 +233,7 @@ export class SettingsTab extends PluginSettingTab {
       )
         return;
 
-      new Setting(this.pluginListContainer)
+      const setting = new Setting(this.pluginListContainer)
         .setName(plugin.name)
         .addDropdown((dropdown) => {
           this.dropdowns.push(dropdown);
@@ -242,16 +246,79 @@ export class SettingsTab extends PluginSettingTab {
                 mode: value,
                 userConfigured: true,
               };
+              this.ensureLazyWithViewEntry(plugin.id, value);
               this.pendingPluginIds.add(plugin.id);
               this.updateApplyButton();
+              this.buildPluginList(); // Rebuild to show/hide view types input
             });
-        })
-        .then((setting) => {
-          if (this.lazyPlugin.settings.showDescriptions) {
-            // Show or hide the plugin description depending on the user's choice
-            setting.setDesc(plugin.description);
-          }
         });
+
+      // if (currentValue === "lazyWithView") {
+      //   setting.addText((text) => {
+      //     text
+      //       .setPlaceholder("view-type-1, view-type-2")
+      //       .setValue(
+      //         (this.lazyPlugin.settings.lazyWithViews?.[plugin.id] || []).join(
+      //           ", ",
+      //         ),
+      //       )
+      //       .onChange(async (value) => {
+      //         const viewTypes = value
+      //           .split(",")
+      //           .map((t) => t.trim())
+      //           .filter((t) => t.length > 0);
+      //         if (!this.lazyPlugin.settings.lazyWithViews) {
+      //           this.lazyPlugin.settings.lazyWithViews = {};
+      //         }
+      //         this.lazyPlugin.settings.lazyWithViews[plugin.id] = viewTypes;
+      //         await this.lazyPlugin.saveSettings();
+      //       });
+      //   });
+      // }
+
+      setting.then((setting) => {
+        if (this.lazyPlugin.settings.showDescriptions) {
+          // Show or hide the plugin description depending on the user's choice
+          setting.setDesc(plugin.description);
+        }
+      });
+    });
+  }
+
+  private ensureLazyWithViewEntry(pluginId: string, mode: PluginMode) {
+    if (!this.lazyPlugin.settings.lazyWithViews) {
+      this.lazyPlugin.settings.lazyWithViews = {};
+    }
+    if (mode === "lazyWithView") {
+      if (!this.lazyPlugin.settings.lazyWithViews[pluginId]) {
+        this.lazyPlugin.settings.lazyWithViews[pluginId] = [];
+      }
+      return;
+    }
+
+    if (this.lazyPlugin.settings.lazyWithViews[pluginId]) {
+      delete this.lazyPlugin.settings.lazyWithViews[pluginId];
+    }
+  }
+
+  private normalizeLazyWithViews() {
+    if (!this.lazyPlugin.settings.lazyWithViews) {
+      this.lazyPlugin.settings.lazyWithViews = {};
+    }
+
+    const lazyWithViews = this.lazyPlugin.settings.lazyWithViews;
+    this.lazyPlugin.manifests.forEach((plugin) => {
+      const mode = this.lazyPlugin.getPluginMode(plugin.id);
+      if (mode === "lazyWithView") {
+        if (!lazyWithViews[plugin.id]) {
+          lazyWithViews[plugin.id] = [];
+        }
+        return;
+      }
+
+      if (lazyWithViews[plugin.id]) {
+        delete lazyWithViews[plugin.id];
+      }
     });
   }
 

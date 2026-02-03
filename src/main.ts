@@ -1,4 +1,4 @@
-import { Plugin, PluginManifest } from "obsidian";
+import { Plugin, PluginManifest, WorkspaceLeaf, ViewState } from "obsidian";
 import { CommandCacheService } from "./services/command-cache-service";
 import { LazyCommandRunner } from "./services/lazy-command-runner";
 import { PluginRegistry } from "./services/plugin-registry";
@@ -68,6 +68,13 @@ export default class LazyPlugin extends Plugin {
           enabledPlugins,
           this.data?.showConsoleLog,
         ),
+      getLazyWithViews: () => this.settings.lazyWithViews,
+      saveLazyWithViews: async (next) => {
+        this.settings.lazyWithViews = next;
+        await this.saveSettings();
+      },
+      ensurePluginLoaded: (pluginId) =>
+        this.lazyRunner.ensurePluginLoaded(pluginId),
     });
 
     await this.migrateSettings();
@@ -76,6 +83,43 @@ export default class LazyPlugin extends Plugin {
 
     this.commandCacheService.loadFromData();
     await this.initializeCommandCache();
+
+    this.patchSetViewState();
+  }
+
+  private patchSetViewState() {
+    const plugin = this;
+    const leafPrototype = WorkspaceLeaf.prototype as any;
+    const originalSetViewState = leafPrototype.setViewState;
+
+    leafPrototype.setViewState = async function (
+      viewState: ViewState,
+      ...args: any[]
+    ) {
+      const result = await originalSetViewState.apply(this, [viewState, ...args]);
+      if (viewState?.type) {
+        plugin.checkViewTypeForLazyLoading(viewState.type);
+      }
+      return result;
+    };
+
+    this.register(() => {
+      leafPrototype.setViewState = originalSetViewState;
+    });
+  }
+
+  async checkViewTypeForLazyLoading(viewType: string) {
+    if (!viewType) return;
+
+    const lazyWithViews = this.settings.lazyWithViews || {};
+    for (const [pluginId, viewTypes] of Object.entries(lazyWithViews)) {
+      if (viewTypes.includes(viewType)) {
+        const mode = this.getPluginMode(pluginId);
+        if (mode === "lazyWithView") {
+          await this.lazyRunner.ensurePluginLoaded(pluginId);
+        }
+      }
+    }
   }
 
   async onunload() {
@@ -200,7 +244,7 @@ export default class LazyPlugin extends Plugin {
       return;
     }
 
-    if (mode === "lazy") {
+    if (mode === "lazy" || mode === "lazyWithView") {
       await this.commandCacheService.ensureCommandsCached(pluginId);
       if (this.obsidianPlugins.enabledPlugins.has(pluginId)) {
         await this.obsidianPlugins.disablePlugin(pluginId);
