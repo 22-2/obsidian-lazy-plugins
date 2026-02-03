@@ -78,6 +78,7 @@ export class SettingsTab extends PluginSettingTab {
     pluginSettings: { [pluginId: string]: PluginSettings } = {};
     pendingPluginIds = new Set<string>();
     applyButton?: ButtonComponent;
+    resultsCountEl?: HTMLElement;
 
     constructor(app: App, plugin: LazyPlugin) {
         super(app, plugin);
@@ -255,6 +256,11 @@ export class SettingsTab extends PluginSettingTab {
                 );
             });
         new Setting(this.containerEl)
+            .then((setting) => {
+                this.resultsCountEl = setting.controlEl.createEl("span", {
+                    cls: "lazy-plugin-results-count",
+                });
+            })
             // Add a free-text filter
             .addText((text) =>
                 text.setPlaceholder("Type to filter list").onChange((value) => {
@@ -270,6 +276,7 @@ export class SettingsTab extends PluginSettingTab {
 
     buildPluginList() {
         this.pluginListContainer.textContent = "";
+        let count = 0;
         // Add the delay settings for each installed plugin
         this.lazyPlugin.manifests.forEach((plugin) => {
             const currentValue = this.lazyPlugin.getPluginMode(plugin.id);
@@ -284,6 +291,7 @@ export class SettingsTab extends PluginSettingTab {
             )
                 return;
 
+            count++;
             const setting = new Setting(this.pluginListContainer)
                 .setName(plugin.name)
                 .addDropdown((dropdown) => {
@@ -334,6 +342,10 @@ export class SettingsTab extends PluginSettingTab {
                 }
             });
         });
+
+        if (this.resultsCountEl) {
+            this.resultsCountEl.setText(`${count} plugins`);
+        }
     }
 
     private ensurelazyOnViewEntry(pluginId: string, mode: PluginMode) {
