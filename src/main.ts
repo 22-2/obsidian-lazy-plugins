@@ -102,6 +102,7 @@ export default class OnDemandPlugin extends Plugin {
         this.addSettingTab(new SettingsTab(this.app, this));
 
         this.commandCacheService.loadFromData();
+        this.commandCacheService.registerCachedCommands();
         this.patchPluginEnableDisable();
         // DO NOT CALL THIS HERE TO AVOID UNINTENDED BEHAVIOR ON STARTUP
         // await this.initializeCommandCache();
