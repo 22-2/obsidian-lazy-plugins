@@ -33,8 +33,8 @@ export class ProgressDialog extends Modal {
         });
 
         this.progressEl = this.contentEl.createEl("progress", {
+            cls: "lazy-plugin-progress-bar",
             attr: {
-                style: "width: 100%",
                 max: String(this.total),
                 value: "0",
             },

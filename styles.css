@@ -8,3 +8,7 @@
     color: var(--text-muted);
     font-size: 0.8em;
 }
+
+.lazy-plugin-progress-bar {
+    width: 100%;
+}
