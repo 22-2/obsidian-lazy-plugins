@@ -427,7 +427,7 @@ export class SettingsTab extends PluginSettingTab {
         const count = this.pendingPluginIds.size;
         this.applyButton.setDisabled(count === 0);
         this.applyButton.setButtonText(
-            count === 0 ? "Apply changes" : `Apply changes (${count})`,
+            count === 0 ? "Apply changes" : `Apply changes (${count}) & restart Obsidian`,
         );
     }
 }
