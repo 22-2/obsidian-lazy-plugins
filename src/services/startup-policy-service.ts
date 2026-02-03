@@ -17,7 +17,7 @@ interface StartupPolicyDeps {
     getlazyOnViews: () => Record<string, string[]> | undefined;
     savelazyOnViews: (next: Record<string, string[]>) => Promise<void>;
     ensurePluginLoaded: (pluginId: string) => Promise<boolean>;
-    refreshCommandCache: () => Promise<void>;
+    refreshCommandCache: (pluginIds?: string[]) => Promise<void>;
 }
 
 export class StartupPolicyService {
@@ -28,13 +28,13 @@ export class StartupPolicyService {
 
     constructor(private deps: StartupPolicyDeps) {}
 
-    async apply(showProgress = false) {
+    async apply(showProgress = false, pluginIds?: string[]) {
         if (this.startupPolicyLock) {
             this.startupPolicyPending = true;
             await this.startupPolicyLock;
             if (this.startupPolicyPending) {
                 this.startupPolicyPending = false;
-                await this.apply(showProgress);
+                await this.apply(showProgress, pluginIds);
             }
             return;
         }
@@ -54,7 +54,14 @@ export class StartupPolicyService {
             let progress: ProgressDialog | null = null;
             let cancelled = false;
             const manifests = this.deps.getManifests();
-            const lazyManifests = manifests.filter((plugin) => {
+            const targetPluginIds =
+                pluginIds && pluginIds.length > 0
+                    ? new Set(pluginIds)
+                    : null;
+            const targetManifests = targetPluginIds
+                ? manifests.filter((plugin) => targetPluginIds.has(plugin.id))
+                : manifests;
+            const lazyManifests = targetManifests.filter((plugin) => {
                 const mode = this.deps.getPluginMode(plugin.id);
                 return mode === "lazy" || mode === "lazyOnView";
             });
@@ -117,7 +124,7 @@ export class StartupPolicyService {
             try {
                 if (!showProgress) {
                     let index = 0;
-                    for (const plugin of manifests) {
+                    for (const plugin of targetManifests) {
                         index += 1;
                         progress?.setStatus(`Applying ${plugin.name}`);
                         progress?.setProgress(index);
@@ -176,7 +183,11 @@ export class StartupPolicyService {
 
                     if (!cancelled) {
                         progress?.setStatus("Rebuilding command cache…");
-                        await this.deps.refreshCommandCache();
+                        await this.deps.refreshCommandCache(
+                            targetPluginIds
+                                ? Array.from(targetPluginIds)
+                                : undefined,
+                        );
                         progress?.setProgress(lazyManifests.length + 2);
                     }
                 }

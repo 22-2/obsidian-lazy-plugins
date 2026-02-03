@@ -212,7 +212,10 @@ export class SettingsTab extends PluginSettingTab {
                     if (this.pendingPluginIds.size === 0) return;
                     this.normalizelazyOnViews();
                     await this.lazyPlugin.saveSettings();
-                    await this.lazyPlugin.applyStartupPolicy(true);
+                    await this.lazyPlugin.applyStartupPolicy(
+                        true,
+                        Array.from(this.pendingPluginIds),
+                    );
                     this.pendingPluginIds.clear();
                     this.updateApplyButton();
                 });

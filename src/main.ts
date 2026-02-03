@@ -90,8 +90,8 @@ export default class LazyPlugin extends Plugin {
             },
             ensurePluginLoaded: (pluginId) =>
                 this.lazyRunner.ensurePluginLoaded(pluginId),
-            refreshCommandCache: () =>
-                this.commandCacheService.refreshCommandCache(),
+            refreshCommandCache: (pluginIds) =>
+                this.commandCacheService.refreshCommandCache(pluginIds),
         });
 
         // await this.migrateSettings();
@@ -286,8 +286,8 @@ export default class LazyPlugin extends Plugin {
             : null;
     }
 
-    async applyStartupPolicy(showProgress = false) {
-        await this.startupPolicyService.apply(showProgress);
+    async applyStartupPolicy(showProgress = false, pluginIds?: string[]) {
+        await this.startupPolicyService.apply(showProgress, pluginIds);
     }
 
     async applyPluginState(pluginId: string) {

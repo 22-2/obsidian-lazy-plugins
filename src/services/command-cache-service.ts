@@ -70,9 +70,15 @@ export class CommandCacheService {
         });
     }
 
-    async refreshCommandCache() {
+    async refreshCommandCache(pluginIds?: string[]) {
         let updated = false;
-        for (const plugin of this.deps.getManifests()) {
+        const manifests = this.deps.getManifests();
+        const targetPluginIds =
+            pluginIds && pluginIds.length > 0 ? new Set(pluginIds) : null;
+        const targetManifests = targetPluginIds
+            ? manifests.filter((plugin) => targetPluginIds.has(plugin.id))
+            : manifests;
+        for (const plugin of targetManifests) {
             const mode = this.deps.getPluginMode(plugin.id);
             if (mode === "lazy") {
                 if (this.isCommandCacheValid(plugin.id)) continue;
