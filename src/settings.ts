@@ -64,7 +64,7 @@ export const PluginModes: Record<PluginMode, string> = {
     disabled: "⛔ Disabled",
     lazy: "💤 Lazy (cache commands)",
     lazyWithView: "🖼️ Lazy with View",
-    keepEnabled: "✅ Keep enabled",
+    keepEnabled: "✅ Always enabled",
 };
 
 export class SettingsTab extends PluginSettingTab {
