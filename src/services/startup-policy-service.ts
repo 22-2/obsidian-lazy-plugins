@@ -1,7 +1,7 @@
 import { App, PluginManifest } from "obsidian";
 import log from "loglevel";
 import { ProgressDialog } from "../progress";
-import { onDemandPluginId } from "../constants";
+import { ON_DEMAND_PLUGIN_ID } from "../constants";
 import { PluginMode } from "../settings";
 
 const logger = log.getLogger("OnDemandPlugin/StartupPolicyService");
@@ -211,7 +211,7 @@ export class StartupPolicyService {
                         desiredEnabled.add(plugin.id);
                     }
                 });
-                desiredEnabled.add(onDemandPluginId);
+                desiredEnabled.add(ON_DEMAND_PLUGIN_ID);
 
                 this.deps.obsidianPlugins.enabledPlugins.clear();
                 desiredEnabled.forEach((pluginId) => {

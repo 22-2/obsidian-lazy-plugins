@@ -1,6 +1,6 @@
 import { App, Platform, PluginManifest } from "obsidian";
 import log from "loglevel";
-import { onDemandPluginId } from "../constants";
+import { ON_DEMAND_PLUGIN_ID } from "../constants";
 
 const logger = log.getLogger("OnDemandPlugin/PluginRegistry");
 
@@ -27,7 +27,7 @@ export class PluginRegistry {
             .filter(
                 (plugin: PluginManifest) =>
                     // Filter out the Lazy Loader plugin
-                    plugin.id !== onDemandPluginId &&
+                    plugin.id !== ON_DEMAND_PLUGIN_ID &&
                     // Filter out desktop-only plugins from mobile
                     !(Platform.isMobile && plugin.isDesktopOnly),
             )
