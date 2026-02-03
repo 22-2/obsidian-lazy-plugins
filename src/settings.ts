@@ -4,6 +4,7 @@ import {
   DropdownComponent,
   PluginSettingTab,
   Setting,
+  Notice,
 } from "obsidian";
 import LazyPlugin from "./main";
 
@@ -151,26 +152,26 @@ export class SettingsTab extends PluginSettingTab {
           });
       });
 
-    new Setting(this.containerEl)
-      .setName("Register lazy plugins in bulk")
-      .addDropdown((dropdown) => {
-        dropdown.addOption("", "Set all plugins to be:");
-        this.addModeOptions(dropdown);
-        dropdown.onChange(async (value: PluginMode) => {
-          // Update all plugins and defer apply until user confirms
-          this.lazyPlugin.manifests.forEach((plugin) => {
-            this.pluginSettings[plugin.id] = {
-              mode: value,
-              userConfigured: true,
-            };
-            this.pendingPluginIds.add(plugin.id);
-          });
-          // Update all the dropdowns
-          this.dropdowns.forEach((dropdown) => dropdown.setValue(value));
-          dropdown.setValue("");
-          this.updateApplyButton();
-        });
-      });
+    // new Setting(this.containerEl)
+    //   .setName("Register lazy plugins in bulk")
+    //   .addDropdown((dropdown) => {
+    //     dropdown.addOption("", "Set all plugins to be:");
+    //     this.addModeOptions(dropdown);
+    //     dropdown.onChange(async (value: PluginMode) => {
+    //       // Update all plugins and defer apply until user confirms
+    //       this.lazyPlugin.manifests.forEach((plugin) => {
+    //         this.pluginSettings[plugin.id] = {
+    //           mode: value,
+    //           userConfigured: true,
+    //         };
+    //         this.pendingPluginIds.add(plugin.id);
+    //       });
+    //       // Update all the dropdowns
+    //       this.dropdowns.forEach((dropdown) => dropdown.setValue(value));
+    //       dropdown.setValue("");
+    //       this.updateApplyButton();
+    //     });
+    //   });
 
     new Setting(this.containerEl)
       .setName("Apply pending changes")
@@ -187,6 +188,26 @@ export class SettingsTab extends PluginSettingTab {
           this.updateApplyButton();
         });
         this.updateApplyButton();
+      });
+
+    new Setting(this.containerEl)
+      .setName("Force rebuild command cache")
+      .setDesc("Force a rebuild of the cached commands for lazy plugins.")
+      .addButton((button) => {
+        button.setButtonText("Rebuild cache");
+        button.onClick(async () => {
+          button.setDisabled(true);
+          try {
+            await this.lazyPlugin.initializeCommandCache();
+            new Notice("Command cache rebuilt");
+          } catch (e) {
+            new Notice("Failed to rebuild command cache");
+            // eslint-disable-next-line no-console
+            console.error(e);
+          } finally {
+            button.setDisabled(false);
+          }
+        });
       });
 
     // Add the filter buttons
