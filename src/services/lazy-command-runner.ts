@@ -221,6 +221,8 @@ export class LazyCommandRunner {
 
         if (!command) return false;
 
+        // Don't treat our own wrappers as "executable" while waiting for the real plugin to load.
+        // This avoids recursive loops and false positives.
         if (this.deps.isWrapperCommand?.(commandId)) {
             return false;
         }

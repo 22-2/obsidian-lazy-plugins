@@ -40,6 +40,7 @@ export class CommandCacheService {
     private commandCache = new Map<string, CachedCommand>();
     private pluginCommandIndex = new Map<string, Set<string>>();
     private registeredWrappers = new Set<string>();
+    /** Tracks the actual command objects we register as wrappers, to distinguish them from real plugin commands. */
     private wrapperCommands = new Map<string, unknown>();
 
     constructor(private deps: CommandCacheDeps) {}
@@ -234,6 +235,10 @@ export class CommandCacheService {
         return existing === wrapper;
     }
 
+    /**
+     * Ensures consistent command state by swapping wrappers for real commands where available,
+     * or restoring wrappers if real commands are missing. This avoids "command gaps" during loading.
+     */
     syncCommandWrappersForPlugin(pluginId: string) {
         const commandIds = this.pluginCommandIndex.get(pluginId);
         if (!commandIds) return;
