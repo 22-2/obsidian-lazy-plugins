@@ -1,1 +1,1 @@
-export const onDemandPluginId = require("../manifest.json").id;
+export const onDemandPluginId = "on-demand-plugins";
