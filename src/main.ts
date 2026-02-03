@@ -83,9 +83,9 @@ export default class LazyPlugin extends Plugin {
                     enabledPlugins,
                     this.data?.showConsoleLog,
                 ),
-            getLazyWithViews: () => this.settings.lazyWithViews,
-            saveLazyWithViews: async (next) => {
-                this.settings.lazyWithViews = next;
+            getlazyOnViews: () => this.settings.lazyOnViews,
+            savelazyOnViews: async (next) => {
+                this.settings.lazyOnViews = next;
                 await this.saveSettings();
             },
             ensurePluginLoaded: (pluginId) =>
@@ -151,7 +151,7 @@ export default class LazyPlugin extends Plugin {
                             true;
                         if (
                             shouldReRegister &&
-                            (mode === "lazy" || mode === "lazyWithView")
+                            (mode === "lazy" || mode === "lazyOnView")
                         ) {
                             await plugin.commandCacheService.ensureCommandsCached(
                                 pluginId,
@@ -168,11 +168,11 @@ export default class LazyPlugin extends Plugin {
     async checkViewTypeForLazyLoading(viewType: string) {
         if (!viewType) return;
 
-        const lazyWithViews = this.settings.lazyWithViews || {};
-        for (const [pluginId, viewTypes] of Object.entries(lazyWithViews)) {
+        const lazyOnViews = this.settings.lazyOnViews || {};
+        for (const [pluginId, viewTypes] of Object.entries(lazyOnViews)) {
             if (viewTypes.includes(viewType)) {
                 const mode = this.getPluginMode(pluginId);
-                if (mode === "lazyWithView") {
+                if (mode === "lazyOnView") {
                     await this.lazyRunner.ensurePluginLoaded(pluginId);
                 }
             }
@@ -301,7 +301,7 @@ export default class LazyPlugin extends Plugin {
             return;
         }
 
-        if (mode === "lazy" || mode === "lazyWithView") {
+        if (mode === "lazy" || mode === "lazyOnView") {
             await this.commandCacheService.ensureCommandsCached(pluginId);
             if (this.obsidianPlugins.enabledPlugins.has(pluginId)) {
                 await this.obsidianPlugins.disablePlugin(pluginId);

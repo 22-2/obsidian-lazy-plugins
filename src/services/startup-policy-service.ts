@@ -14,8 +14,8 @@ interface StartupPolicyDeps {
     getPluginMode: (pluginId: string) => PluginMode;
     applyPluginState: (pluginId: string) => Promise<void>;
     writeCommunityPluginsFile: (enabledPlugins: string[]) => Promise<void>;
-    getLazyWithViews: () => Record<string, string[]> | undefined;
-    saveLazyWithViews: (next: Record<string, string[]>) => Promise<void>;
+    getlazyOnViews: () => Record<string, string[]> | undefined;
+    savelazyOnViews: (next: Record<string, string[]>) => Promise<void>;
     ensurePluginLoaded: (pluginId: string) => Promise<boolean>;
     refreshCommandCache: () => Promise<void>;
 }
@@ -56,7 +56,7 @@ export class StartupPolicyService {
             const manifests = this.deps.getManifests();
             const lazyManifests = manifests.filter((plugin) => {
                 const mode = this.deps.getPluginMode(plugin.id);
-                return mode === "lazy" || mode === "lazyWithView";
+                return mode === "lazy" || mode === "lazyOnView";
             });
 
             if (showProgress) {
@@ -78,8 +78,8 @@ export class StartupPolicyService {
                 };
             };
 
-            const lazyWithViews: Record<string, string[]> = {
-                ...(this.deps.getLazyWithViews() ?? {}),
+            const lazyOnViews: Record<string, string[]> = {
+                ...(this.deps.getlazyOnViews() ?? {}),
             };
 
             const originalRegisterView = viewRegistry?.registerView;
@@ -95,15 +95,15 @@ export class StartupPolicyService {
                     if (
                         loadingPluginId &&
                         this.deps.getPluginMode(loadingPluginId) ===
-                            "lazyWithView" &&
+                            "lazyOnView" &&
                         typeof type === "string" &&
                         type.length > 0
                     ) {
-                        if (!lazyWithViews[loadingPluginId]) {
-                            lazyWithViews[loadingPluginId] = [];
+                        if (!lazyOnViews[loadingPluginId]) {
+                            lazyOnViews[loadingPluginId] = [];
                         }
-                        if (!lazyWithViews[loadingPluginId].includes(type)) {
-                            lazyWithViews[loadingPluginId].push(type);
+                        if (!lazyOnViews[loadingPluginId].includes(type)) {
+                            lazyOnViews[loadingPluginId].push(type);
                         }
                     }
 
@@ -123,7 +123,7 @@ export class StartupPolicyService {
                         progress?.setProgress(index);
                         if (
                             this.deps.getPluginMode(plugin.id) ===
-                            "lazyWithView"
+                            "lazyOnView"
                         ) {
                             await this.deps.ensurePluginLoaded(plugin.id);
                         }
@@ -185,11 +185,11 @@ export class StartupPolicyService {
                     viewRegistry.registerView = originalRegisterView;
                 }
                 for (const plugin of this.deps.getManifests()) {
-                    if (this.deps.getPluginMode(plugin.id) !== "lazyWithView") {
-                        delete lazyWithViews[plugin.id];
+                    if (this.deps.getPluginMode(plugin.id) !== "lazyOnView") {
+                        delete lazyOnViews[plugin.id];
                     }
                 }
-                await this.deps.saveLazyWithViews(lazyWithViews);
+                await this.deps.savelazyOnViews(lazyOnViews);
 
                 const desiredEnabled = new Set<string>();
                 this.deps.getManifests().forEach((plugin) => {

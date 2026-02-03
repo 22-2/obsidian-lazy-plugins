@@ -19,7 +19,7 @@ export interface DeviceSettings {
     showDescriptions: boolean;
     reRegisterLazyCommandsOnDisable: boolean;
     plugins: { [pluginId: string]: PluginSettings };
-    lazyWithViews?: Record<string, string[]>;
+    lazyOnViews?: Record<string, string[]>;
 
     [key: string]: any;
 }
@@ -29,7 +29,7 @@ export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
     showDescriptions: true,
     reRegisterLazyCommandsOnDisable: true,
     plugins: {},
-    lazyWithViews: {},
+    lazyOnViews: {},
 };
 
 // Global settings for the plugin
@@ -58,12 +58,12 @@ export interface CachedCommandEntry {
 export type CommandCache = Record<string, CachedCommandEntry[]>;
 export type CommandCacheVersions = Record<string, string>;
 
-export type PluginMode = "disabled" | "lazy" | "keepEnabled" | "lazyWithView";
+export type PluginMode = "disabled" | "lazy" | "keepEnabled" | "lazyOnView";
 
 export const PluginModes: Record<PluginMode, string> = {
     disabled: "⛔ Disabled",
     lazy: "💤 Lazy (cache commands)",
-    lazyWithView: "🖼️ Lazy with View",
+    lazyOnView: "🖼️ Lazy on View",
     keepEnabled: "✅ Always enabled",
 };
 
@@ -209,7 +209,7 @@ export class SettingsTab extends PluginSettingTab {
                 button.setButtonText("Apply changes");
                 button.onClick(async () => {
                     if (this.pendingPluginIds.size === 0) return;
-                    this.normalizeLazyWithViews();
+                    this.normalizelazyOnViews();
                     await this.lazyPlugin.saveSettings();
                     await this.lazyPlugin.applyStartupPolicy(true);
                     this.pendingPluginIds.clear();
@@ -297,19 +297,19 @@ export class SettingsTab extends PluginSettingTab {
                                 mode: value,
                                 userConfigured: true,
                             };
-                            this.ensureLazyWithViewEntry(plugin.id, value);
+                            this.ensurelazyOnViewEntry(plugin.id, value);
                             this.pendingPluginIds.add(plugin.id);
                             this.updateApplyButton();
                             this.buildPluginList(); // Rebuild to show/hide view types input
                         });
                 });
 
-            // if (currentValue === "lazyWithView") {
+            // if (currentValue === "lazyOnView") {
             //   setting.addText((text) => {
             //     text
             //       .setPlaceholder("view-type-1, view-type-2")
             //       .setValue(
-            //         (this.lazyPlugin.settings.lazyWithViews?.[plugin.id] || []).join(
+            //         (this.lazyPlugin.settings.lazyOnViews?.[plugin.id] || []).join(
             //           ", ",
             //         ),
             //       )
@@ -318,10 +318,10 @@ export class SettingsTab extends PluginSettingTab {
             //           .split(",")
             //           .map((t) => t.trim())
             //           .filter((t) => t.length > 0);
-            //         if (!this.lazyPlugin.settings.lazyWithViews) {
-            //           this.lazyPlugin.settings.lazyWithViews = {};
+            //         if (!this.lazyPlugin.settings.lazyOnViews) {
+            //           this.lazyPlugin.settings.lazyOnViews = {};
             //         }
-            //         this.lazyPlugin.settings.lazyWithViews[plugin.id] = viewTypes;
+            //         this.lazyPlugin.settings.lazyOnViews[plugin.id] = viewTypes;
             //         await this.lazyPlugin.saveSettings();
             //       });
             //   });
@@ -336,39 +336,39 @@ export class SettingsTab extends PluginSettingTab {
         });
     }
 
-    private ensureLazyWithViewEntry(pluginId: string, mode: PluginMode) {
-        if (!this.lazyPlugin.settings.lazyWithViews) {
-            this.lazyPlugin.settings.lazyWithViews = {};
+    private ensurelazyOnViewEntry(pluginId: string, mode: PluginMode) {
+        if (!this.lazyPlugin.settings.lazyOnViews) {
+            this.lazyPlugin.settings.lazyOnViews = {};
         }
-        if (mode === "lazyWithView") {
-            if (!this.lazyPlugin.settings.lazyWithViews[pluginId]) {
-                this.lazyPlugin.settings.lazyWithViews[pluginId] = [];
+        if (mode === "lazyOnView") {
+            if (!this.lazyPlugin.settings.lazyOnViews[pluginId]) {
+                this.lazyPlugin.settings.lazyOnViews[pluginId] = [];
             }
             return;
         }
 
-        if (this.lazyPlugin.settings.lazyWithViews[pluginId]) {
-            delete this.lazyPlugin.settings.lazyWithViews[pluginId];
+        if (this.lazyPlugin.settings.lazyOnViews[pluginId]) {
+            delete this.lazyPlugin.settings.lazyOnViews[pluginId];
         }
     }
 
-    private normalizeLazyWithViews() {
-        if (!this.lazyPlugin.settings.lazyWithViews) {
-            this.lazyPlugin.settings.lazyWithViews = {};
+    private normalizelazyOnViews() {
+        if (!this.lazyPlugin.settings.lazyOnViews) {
+            this.lazyPlugin.settings.lazyOnViews = {};
         }
 
-        const lazyWithViews = this.lazyPlugin.settings.lazyWithViews;
+        const lazyOnViews = this.lazyPlugin.settings.lazyOnViews;
         this.lazyPlugin.manifests.forEach((plugin) => {
             const mode = this.lazyPlugin.getPluginMode(plugin.id);
-            if (mode === "lazyWithView") {
-                if (!lazyWithViews[plugin.id]) {
-                    lazyWithViews[plugin.id] = [];
+            if (mode === "lazyOnView") {
+                if (!lazyOnViews[plugin.id]) {
+                    lazyOnViews[plugin.id] = [];
                 }
                 return;
             }
 
-            if (lazyWithViews[plugin.id]) {
-                delete lazyWithViews[plugin.id];
+            if (lazyOnViews[plugin.id]) {
+                delete lazyOnViews[plugin.id];
             }
         });
     }
