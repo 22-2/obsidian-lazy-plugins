@@ -1,5 +1,7 @@
-import { Plugin, PluginManifest, WorkspaceLeaf, ViewState } from "obsidian";
+import log from "loglevel";
 import { around } from "monkey-around";
+import { Plugin, PluginManifest, ViewState, WorkspaceLeaf } from "obsidian";
+import { Commands, Plugins } from "obsidian-typings";
 import { CommandCacheService } from "./services/command-cache-service";
 import { LazyCommandRunner } from "./services/lazy-command-runner";
 import { PluginRegistry } from "./services/plugin-registry";
@@ -11,8 +13,7 @@ import {
     PluginMode,
     SettingsTab,
 } from "./settings";
-import { Commands, Plugins } from "obsidian-typings";
-import log, { LogLevelDesc } from "loglevel";
+import { checkViewIsGone, isLeafVisible, rebuildLeafView, toggleLoggerBy } from "./utils";
 
 const logger = log.getLogger("OnDemandPlugin/OnDemandPlugin");
 
@@ -59,6 +60,10 @@ export default class OnDemandPlugin extends Plugin {
                     pluginId,
                 ),
             getData: () => this.data,
+            isWrapperCommand: (commandId) =>
+                this.commandCacheService.isWrapperCommand(commandId),
+            syncCommandWrappersForPlugin: (pluginId) =>
+                this.commandCacheService.syncCommandWrappersForPlugin(pluginId),
         });
 
         this.commandCacheService = new CommandCacheService({
@@ -107,6 +112,47 @@ export default class OnDemandPlugin extends Plugin {
         // DO NOT CALL THIS HERE TO AVOID UNINTENDED BEHAVIOR ON STARTUP
         // await this.initializeCommandCache();
         this.patchSetViewState();
+        this.registerActiveLeafReload();
+    }
+
+    private registerActiveLeafReload() {
+        this.registerEvent(
+            this.app.workspace.on("active-leaf-change", this.initializeLazyViewForLeaf.bind(this)),
+        );
+
+        // Initial load
+        this.app.workspace.onLayoutReady(() => this.app.workspace.iterateAllLeaves((leaf) => {
+            this.initializeLazyViewForLeaf(leaf);
+        }));
+    }
+    
+    async initializeLazyViewForLeaf(leaf: WorkspaceLeaf) {
+        if (!isLeafVisible(leaf)) return;
+        if (checkViewIsGone(leaf)) return;
+        
+        const pluginId = this.getPluginIdForViewType(leaf.view.getViewType());
+        if (!pluginId) return;
+
+        if (this.getPluginMode(pluginId) !== "lazyOnView") return;
+
+        const loaded = await this.lazyRunner.ensurePluginLoaded(
+            pluginId,
+        );
+        if (!loaded) return;
+        console.log("rebuilding leaf view for lazyOnView plugin:", pluginId);
+
+        await rebuildLeafView(leaf);
+        this.commandCacheService.syncCommandWrappersForPlugin(pluginId);
+    }
+
+    private getPluginIdForViewType(viewType: string): string | null {
+        const lazyOnViews = this.settings.lazyOnViews || {};
+        for (const [pluginId, viewTypes] of Object.entries(lazyOnViews)) {
+            if (viewTypes.includes(viewType)) {
+                return pluginId;
+            }
+        }
+        return null;
     }
 
     private patchSetViewState() {
@@ -140,10 +186,11 @@ export default class OnDemandPlugin extends Plugin {
             around(target, {
                 enablePlugin: (next) =>
                     async function (this: Plugins, pluginId: string) {
-                        plugin.commandCacheService.removeCachedCommandsForPlugin(
+                        const result = await next.call(this, pluginId);
+                        plugin.commandCacheService.syncCommandWrappersForPlugin(
                             pluginId,
                         );
-                        return await next.call(this, pluginId);
+                        return result;
                     },
                 disablePlugin: (next) =>
                     async function (this: Plugins, pluginId: string) {
@@ -324,16 +371,4 @@ export default class OnDemandPlugin extends Plugin {
         toggleLoggerBy(level, (name) => name.startsWith("OnDemandPlugin/"));
         logger.debug("Debug mode enabled");
     }
-}
-
-export function toggleLoggerBy(
-	level: LogLevelDesc,
-	filter: (name: string) => boolean = () => true
-): void {
-    Object.values(log.getLoggers())
-    // @ts-expect-error - loglevel types don't expose name property
-		.filter((logger) => filter(logger.name))
-		.forEach((logger) => {
-			logger.setLevel(level);
-		});
 }

@@ -17,6 +17,8 @@ interface LazyCommandRunnerDeps {
     getCachedCommand: (commandId: string) => CachedCommand | undefined;
     removeCachedCommandsForPlugin: (pluginId: string) => void;
     getData: () => LazySettings;
+    isWrapperCommand?: (commandId: string) => boolean;
+    syncCommandWrappersForPlugin?: (pluginId: string) => void;
 }
 
 export class LazyCommandRunner {
@@ -69,11 +71,11 @@ export class LazyCommandRunner {
                 !this.deps.obsidianPlugins.enabledPlugins.has(pluginId) ||
                 !isLoaded
             ) {
-                this.deps.removeCachedCommandsForPlugin(pluginId);
                 await this.deps.obsidianPlugins.enablePlugin(pluginId);
                 const loaded = await this.waitForPluginLoaded(pluginId);
                 if (!loaded) return false;
             }
+            this.deps.syncCommandWrappersForPlugin?.(pluginId);
             return true;
         } catch (error) {
             if (this.deps.getData().showConsoleLog) {
@@ -218,6 +220,10 @@ export class LazyCommandRunner {
             | undefined;
 
         if (!command) return false;
+
+        if (this.deps.isWrapperCommand?.(commandId)) {
+            return false;
+        }
 
         return (
             typeof command.callback === "function" ||

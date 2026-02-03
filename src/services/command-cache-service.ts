@@ -40,6 +40,7 @@ export class CommandCacheService {
     private commandCache = new Map<string, CachedCommand>();
     private pluginCommandIndex = new Map<string, Set<string>>();
     private registeredWrappers = new Set<string>();
+    private wrapperCommands = new Map<string, unknown>();
 
     constructor(private deps: CommandCacheDeps) {}
 
@@ -80,7 +81,7 @@ export class CommandCacheService {
             : manifests;
         for (const plugin of targetManifests) {
             const mode = this.deps.getPluginMode(plugin.id);
-            if (mode === "lazy") {
+            if (mode === "lazy" || mode === "lazyOnView") {
                 if (this.isCommandCacheValid(plugin.id)) continue;
                 updated =
                     (await this.refreshCommandsForPlugin(plugin.id)) || updated;
@@ -152,7 +153,8 @@ export class CommandCacheService {
 
     registerCachedCommands() {
         for (const plugin of this.deps.getManifests()) {
-            if (this.deps.getPluginMode(plugin.id) === "lazy") {
+            const mode = this.deps.getPluginMode(plugin.id);
+            if (mode === "lazy" || mode === "lazyOnView") {
                 this.registerCachedCommandsForPlugin(plugin.id);
             }
         }
@@ -163,8 +165,17 @@ export class CommandCacheService {
         if (!commandIds) return;
 
         commandIds.forEach((commandId) => {
-            if (this.registeredWrappers.has(commandId)) return;
-            if (this.deps.obsidianCommands.commands[commandId]) return;
+            const existing = this.deps.obsidianCommands.commands[commandId];
+            const wrapper = this.wrapperCommands.get(commandId);
+
+            if (existing && wrapper && existing !== wrapper) {
+                this.registeredWrappers.delete(commandId);
+                this.wrapperCommands.delete(commandId);
+                return;
+            }
+
+            if (existing && wrapper && existing === wrapper) return;
+            if (existing && !wrapper) return;
 
             const cached = this.commandCache.get(commandId);
             if (!cached) return;
@@ -180,6 +191,7 @@ export class CommandCacheService {
 
             this.deps.obsidianCommands.addCommand(cmd);
             this.registeredWrappers.add(commandId);
+            this.wrapperCommands.set(commandId, cmd);
         });
     }
 
@@ -195,12 +207,56 @@ export class CommandCacheService {
             removeCommand?: (id: string) => void;
             commands?: Record<string, unknown>;
         };
-        if (typeof commands.removeCommand === "function") {
-            commands.removeCommand(commandId);
-        } else if (commands.commands && commands.commands[commandId]) {
-            delete commands.commands[commandId];
+        const wrapper = this.wrapperCommands.get(commandId);
+        const existing = commands.commands?.[commandId];
+
+        if (wrapper && existing !== wrapper) {
+            this.registeredWrappers.delete(commandId);
+            this.wrapperCommands.delete(commandId);
+            return;
+        }
+
+        if (wrapper && existing === wrapper) {
+            if (typeof commands.removeCommand === "function") {
+                commands.removeCommand(commandId);
+            } else if (commands.commands && commands.commands[commandId]) {
+                delete commands.commands[commandId];
+            }
         }
         this.registeredWrappers.delete(commandId);
+        this.wrapperCommands.delete(commandId);
+    }
+
+    isWrapperCommand(commandId: string): boolean {
+        const wrapper = this.wrapperCommands.get(commandId);
+        if (!wrapper) return false;
+        const existing = this.deps.obsidianCommands.commands[commandId];
+        return existing === wrapper;
+    }
+
+    syncCommandWrappersForPlugin(pluginId: string) {
+        const commandIds = this.pluginCommandIndex.get(pluginId);
+        if (!commandIds) return;
+
+        let shouldRegister = false;
+        commandIds.forEach((commandId) => {
+            const existing = this.deps.obsidianCommands.commands[commandId];
+            const wrapper = this.wrapperCommands.get(commandId);
+
+            if (existing && wrapper && existing !== wrapper) {
+                this.registeredWrappers.delete(commandId);
+                this.wrapperCommands.delete(commandId);
+                return;
+            }
+
+            if (!existing) {
+                shouldRegister = true;
+            }
+        });
+
+        if (shouldRegister) {
+            this.registerCachedCommandsForPlugin(pluginId);
+        }
     }
 
     isCommandCacheValid(pluginId: string): boolean {
