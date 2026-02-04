@@ -1,254 +1,433 @@
-import { App, DropdownComponent, PluginSettingTab, Setting } from 'obsidian'
-import LazyPlugin from './main'
+import {
+    App,
+    ButtonComponent,
+    DropdownComponent,
+    PluginSettingTab,
+    Setting,
+    Notice,
+} from "obsidian";
+import OnDemandPlugin from "./main";
+import log from "loglevel";
 
-export enum LoadingMethod {
-  disabled = 'disabled',
-  instant = 'instant',
-  short = 'short',
-  long = 'long'
-}
+const logger = log.getLogger("OnDemandPlugin/SettingsTab");
 
 export interface PluginSettings {
-  startupType?: LoadingMethod;
+    mode?: PluginMode;
+    userConfigured?: boolean;
 }
 
 // Settings per device (desktop/mobile)
 export interface DeviceSettings {
-  shortDelaySeconds: number;
-  longDelaySeconds: number;
-  delayBetweenPlugins: number;
-  defaultStartupType: LoadingMethod | null;
-  showDescriptions: boolean;
-  enableDependencies: boolean;
-  plugins: { [pluginId: string]: PluginSettings };
-
-  [key: string]: any;
+    defaultMode: PluginMode;
+    showDescriptions: boolean;
+    reRegisterLazyCommandsOnDisable: boolean;
+    plugins: { [pluginId: string]: PluginSettings };
+    lazyOnViews: { [pluginId: string]: string[] };
 }
 
 export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
-  shortDelaySeconds: 5,
-  longDelaySeconds: 15,
-  delayBetweenPlugins: 40, // milliseconds
-  defaultStartupType: null,
-  showDescriptions: true,
-  enableDependencies: false,
-  plugins: {}
-}
+    defaultMode: "disabled",
+    showDescriptions: true,
+    reRegisterLazyCommandsOnDisable: true,
+    plugins: {},
+    lazyOnViews: {},
+};
 
 // Global settings for the plugin
 export interface LazySettings {
-  dualConfigs: boolean;
-  showConsoleLog: boolean;
-  desktop: DeviceSettings;
-  mobile?: DeviceSettings;
+    dualConfigs: boolean;
+    showConsoleLog: boolean;
+    desktop: DeviceSettings;
+    mobile?: DeviceSettings;
+    commandCache?: CommandCache;
+    commandCacheVersions?: CommandCacheVersions;
+    commandCacheUpdatedAt?: number;
 }
 
 export const DEFAULT_SETTINGS: LazySettings = {
-  dualConfigs: false,
-  showConsoleLog: false,
-  desktop: DEFAULT_DEVICE_SETTINGS
+    dualConfigs: false,
+    showConsoleLog: false,
+    desktop: DEFAULT_DEVICE_SETTINGS,
+};
+
+export interface CachedCommandEntry {
+    id: string;
+    name: string;
+    icon?: string;
 }
 
-const LoadingMethods: { [key in LoadingMethod]: string } = {
-  disabled: '⛔ Disable plugin',
-  instant: '⚡ Instant',
-  short: '⌚ Short delay',
-  long: '💤 Long delay'
-}
+export type CommandCache = Record<string, CachedCommandEntry[]>;
+export type CommandCacheVersions = Record<string, string>;
+
+export type PluginMode = "disabled" | "lazy" | "keepEnabled" | "lazyOnView";
+
+export const PluginModes: Record<PluginMode, string> = {
+    disabled: "⛔ Disabled",
+    lazy: "Lazy on command",
+    lazyOnView: "Lazy on view",
+    keepEnabled: "✅ Always enabled",
+};
 
 export class SettingsTab extends PluginSettingTab {
-  app: App
-  lazyPlugin: LazyPlugin
-  dropdowns: DropdownComponent[] = []
-  filterMethod: LoadingMethod | undefined
-  filterString: string | undefined
-  containerEl: HTMLElement
-  pluginListContainer: HTMLElement
-  pluginSettings: { [pluginId: string]: PluginSettings } = {}
+    app: App;
+    plugin: OnDemandPlugin;
+    dropdowns: DropdownComponent[] = [];
+    filterMethod: PluginMode | undefined;
+    filterString: string | undefined;
+    containerEl: HTMLElement;
+    pluginListContainer: HTMLElement;
+    pluginSettings: { [pluginId: string]: PluginSettings } = {};
+    pendingPluginIds = new Set<string>();
+    applyButton?: ButtonComponent;
+    resultsCountEl?: HTMLElement;
 
-  constructor (app: App, plugin: LazyPlugin) {
-    super(app, plugin)
-    this.app = app
-    this.lazyPlugin = plugin
-    this.pluginSettings = this.lazyPlugin.settings.plugins
-  }
-
-  async display () {
-    const { containerEl } = this
-    this.containerEl = containerEl
-
-    // Update the list of installed plugins
-    this.lazyPlugin.updateManifests()
-
-    // Load the settings from disk when the settings modal is displayed.
-    // This avoids the issue where someone has synced the settings from another device,
-    // but since the plugin has already been loaded, the new settings do not show up.
-    await this.lazyPlugin.loadSettings()
-
-    this.buildDom()
-  }
-
-  /**
-   * Build the Settings modal DOM elements
-   */
-  buildDom () {
-    this.containerEl.empty()
-
-    new Setting(this.containerEl)
-      .setName('Separate desktop/mobile configuration')
-      .setDesc('Enable this if you want to have different settings depending whether you\'re using a desktop or mobile device. ' +
-        `All of the settings below can be configured differently on desktop and mobile. You're currently using the ${this.lazyPlugin.device} settings.`)
-      .addToggle(toggle => {
-        toggle
-          .setValue(this.lazyPlugin.data.dualConfigs)
-          .onChange(async (value) => {
-            this.lazyPlugin.data.dualConfigs = value
-            await this.lazyPlugin.saveSettings()
-            // Refresh the settings to make sure the mobile section is configured
-            await this.lazyPlugin.loadSettings()
-            this.buildDom()
-          })
-      })
-
-    new Setting(this.containerEl)
-      .setName('Lazy Loader settings')
-      .setHeading()
-
-    // Create the two timer settings fields
-    Object.entries({
-      shortDelaySeconds: 'Short delay (seconds)',
-      longDelaySeconds: 'Long delay (seconds)'
-    })
-      .forEach(([key, name]) => {
-        new Setting(this.containerEl)
-          .setName(name)
-          .addText(text => text
-            .setValue(this.lazyPlugin.settings[key].toString())
-            .onChange(async (value) => {
-              this.lazyPlugin.settings[key] = parseFloat(parseFloat(value).toFixed(3))
-              await this.lazyPlugin.saveSettings()
-            }))
-      })
-
-    new Setting(this.containerEl)
-      .setName('Default startup type for new plugins')
-      .addDropdown(dropdown => {
-        dropdown.addOption('', 'Nothing configured')
-        this.addDelayOptions(dropdown)
-        dropdown
-          .setValue(this.lazyPlugin.settings.defaultStartupType || '')
-          .onChange(async (value: LoadingMethod) => {
-            this.lazyPlugin.settings.defaultStartupType = value || null
-            await this.lazyPlugin.saveSettings()
-          })
-      })
-
-    new Setting(this.containerEl)
-      .setName('Show plugin descriptions')
-      .addToggle(toggle => {
-        toggle
-          .setValue(this.lazyPlugin.settings.showDescriptions)
-          .onChange(async (value) => {
-            this.lazyPlugin.settings.showDescriptions = value
-            await this.lazyPlugin.saveSettings()
-            this.buildDom()
-          })
-      })
-
-    new Setting(this.containerEl)
-      .setName('Set the delay for all plugins at once')
-      .addDropdown(dropdown => {
-        dropdown.addOption('', 'Set all plugins to be:')
-        this.addDelayOptions(dropdown)
-        dropdown.onChange(async (value: LoadingMethod) => {
-          // Update all plugins and save the config, but don't reload the plugins (would slow the UI down)
-          this.lazyPlugin.manifests.forEach(plugin => {
-            this.pluginSettings[plugin.id] = { startupType: value }
-          })
-          // Update all the dropdowns
-          this.dropdowns.forEach(dropdown => dropdown.setValue(value))
-          dropdown.setValue('')
-          await this.lazyPlugin.saveSettings()
-        })
-      })
-
-    // Add the filter buttons
-    new Setting(this.containerEl)
-      .setName('Plugins')
-      .setHeading()
-      .setDesc('Filter by: ')
-      // Add the buttons to filter by startup method
-      .then(setting => {
-        this.addFilterButton(setting.descEl, 'All')
-        Object.keys(LoadingMethods)
-          .forEach(key => this.addFilterButton(setting.descEl, LoadingMethods[key as LoadingMethod], key as LoadingMethod))
-      })
-    new Setting(this.containerEl)
-      // Add a free-text filter
-      .addText(text => text
-        .setPlaceholder('Type to filter list')
-        .onChange(value => {
-          this.filterString = value
-          this.buildPluginList()
-        }))
-
-    // Add an element to contain the plugin list
-    this.pluginListContainer = this.containerEl.createEl('div')
-    this.buildPluginList()
-  }
-
-  buildPluginList () {
-    this.pluginListContainer.textContent = ''
-    // Add the delay settings for each installed plugin
-    this.lazyPlugin.manifests
-      .forEach(plugin => {
-        const currentValue = this.lazyPlugin.getPluginStartup(plugin.id)
-
-        // Filter the list of plugins if there is a filter specified
-        if (this.filterMethod && currentValue !== this.filterMethod) return
-        if (this.filterString && !plugin.name.toLowerCase().includes(this.filterString.toLowerCase())) return
-
-        new Setting(this.pluginListContainer)
-          .setName(plugin.name)
-          .addDropdown(dropdown => {
-            this.dropdowns.push(dropdown)
-            this.addDelayOptions(dropdown)
-            dropdown
-              .setValue(currentValue)
-              .onChange(async (value: LoadingMethod) => {
-                // Update the config file, and disable/enable the plugin if needed
-                await this.lazyPlugin.updatePluginSettings(plugin.id, value)
-                this.lazyPlugin.setPluginStartup(plugin.id).then()
-              })
-          })
-          .then(setting => {
-            if (this.lazyPlugin.settings.showDescriptions) {
-              // Show or hide the plugin description depending on the user's choice
-              setting.setDesc(plugin.description)
-            }
-          })
-      })
-  }
-
-  /**
-   * Add the dropdown select options for each delay type
-   */
-  addDelayOptions (el: DropdownComponent) {
-    Object.keys(LoadingMethods)
-      .forEach(key => {
-        el.addOption(key, LoadingMethods[key as LoadingMethod])
-      })
-  }
-
-  /**
-   * Add a filter button in the header of the plugin list
-   */
-  addFilterButton (el: HTMLElement, text: string, value?: LoadingMethod) {
-    const link = el.createEl('button', { text })
-    link.addClass('lazy-plugin-filter')
-    link.onclick = () => {
-      this.filterMethod = value
-      this.buildPluginList()
+    constructor(app: App, plugin: OnDemandPlugin) {
+        super(app, plugin);
+        this.app = app;
+        this.plugin = plugin;
+        this.pluginSettings = this.plugin.settings.plugins;
     }
-  }
+
+    async display() {
+        const { containerEl } = this;
+        this.containerEl = containerEl;
+
+        // Update the list of installed plugins
+        this.plugin.updateManifests();
+
+        // Load the settings from disk when the settings modal is displayed.
+        // This avoids the issue where someone has synced the settings from another device,
+        // but since the plugin has already been loaded, the new settings do not show up.
+        await this.plugin.loadSettings();
+        this.pluginSettings = this.plugin.settings.plugins;
+        
+        // Set initial configuration for any newly installed plugins
+        await this.plugin.setInitialPluginsConfiguration();
+        
+        this.pendingPluginIds.clear();
+
+        this.buildDom();
+    }
+
+    /**
+     * Build the Settings modal DOM elements
+     */
+    buildDom() {
+        this.containerEl.empty();
+        this.dropdowns = [];
+
+        new Setting(this.containerEl)
+            .setName("Separate desktop/mobile configuration")
+            .setDesc(
+                "Enable this if you want to have different settings depending whether you're using a desktop or mobile device. " +
+                    `All of the settings below can be configured differently on desktop and mobile. You're currently using the ${this.plugin.device} settings.`,
+            )
+            .addToggle((toggle) => {
+                toggle
+                    .setValue(this.plugin.data.dualConfigs)
+                    .onChange(async (value) => {
+                        this.plugin.data.dualConfigs = value;
+                        await this.plugin.saveSettings();
+                        // Refresh the settings to make sure the mobile section is configured
+                        await this.plugin.loadSettings();
+                        this.buildDom();
+                    });
+            });
+
+        new Setting(this.containerEl)
+            .setName("Lazy command caching")
+            .setHeading();
+
+        new Setting(this.containerEl)
+            .setName("Default behavior for new plugins")
+            .addDropdown((dropdown) => {
+                this.addModeOptions(dropdown);
+                dropdown
+                    .setValue(
+                        this.plugin.settings.defaultMode || "disabled",
+                    )
+                    .onChange(async (value: PluginMode) => {
+                        this.plugin.settings.defaultMode = value;
+                        await this.plugin.saveSettings();
+                    });
+            });
+
+        new Setting(this.containerEl)
+            .setName("Show plugin descriptions")
+            .addToggle((toggle) => {
+                toggle
+                    .setValue(this.plugin.settings.showDescriptions)
+                    .onChange(async (value) => {
+                        this.plugin.settings.showDescriptions = value;
+                        await this.plugin.saveSettings();
+                        this.buildDom();
+                    });
+            });
+
+        new Setting(this.containerEl)
+            .setName("Debug log output")
+            .setDesc("Enable detailed logs for troubleshooting.")
+            .addToggle((toggle) => {
+                toggle
+                    .setValue(this.plugin.data.showConsoleLog)
+                    .onChange(async (value) => {
+                        this.plugin.data.showConsoleLog = value;
+                        await this.plugin.saveSettings();
+                        this.plugin.configureLogger();
+                    });
+            });
+
+        new Setting(this.containerEl)
+            .setName("Re-register lazy commands on disable")
+            .setDesc(
+                "When a lazy plugin is manually disabled, re-register its cached command wrappers so the commands remain available.",
+            )
+            .addToggle((toggle) => {
+                toggle
+                    .setValue(
+                        this.plugin.settings
+                            .reRegisterLazyCommandsOnDisable,
+                    )
+                    .onChange(async (value) => {
+                        this.plugin.settings.reRegisterLazyCommandsOnDisable =
+                            value;
+                        await this.plugin.saveSettings();
+                    });
+            });
+
+        // new Setting(this.containerEl)
+        //   .setName("Register lazy plugins in bulk")
+        //   .addDropdown((dropdown) => {
+        //     dropdown.addOption("", "Set all plugins to be:");
+        //     this.addModeOptions(dropdown);
+        //     dropdown.onChange(async (value: PluginMode) => {
+        //       // Update all plugins and defer apply until user confirms
+        //       this.onDemandPlugin.manifests.forEach((plugin) => {
+        //         this.pluginSettings[plugin.id] = {
+        //           mode: value,
+        //           userConfigured: true,
+        //         };
+        //         this.pendingPluginIds.add(plugin.id);
+        //       });
+        //       // Update all the dropdowns
+        //       this.dropdowns.forEach((dropdown) => dropdown.setValue(value));
+        //       dropdown.setValue("");
+        //       this.updateApplyButton();
+        //     });
+        //   });
+
+        new Setting(this.containerEl)
+            .setName("Apply pending changes")
+            .setDesc("Plugin mode changes are queued until you apply them.")
+            .addButton((button) => {
+                this.applyButton = button;
+                button.setButtonText("Apply changes");
+                button.onClick(async () => {
+                    if (this.pendingPluginIds.size === 0) return;
+                    this.normalizelazyOnViews();
+                    await this.plugin.saveSettings();
+                    await this.plugin.applyStartupPolicy(
+                        true,
+                        Array.from(this.pendingPluginIds),
+                    );
+                    this.pendingPluginIds.clear();
+                    this.updateApplyButton();
+                });
+                this.updateApplyButton();
+            });
+
+        new Setting(this.containerEl)
+            .setName("Force rebuild command cache")
+            .setDesc("Force a rebuild of the cached commands for lazy plugins.")
+            .addButton((button) => {
+                button.setButtonText("Rebuild cache");
+                button.onClick(async () => {
+                    button.setDisabled(true);
+                    try {
+                        await this.plugin.initializeCommandCache();
+                        new Notice("Command cache rebuilt");
+                    } catch (e) {
+                        new Notice("Failed to rebuild command cache");
+                        logger.error(e);
+                    } finally {
+                        button.setDisabled(false);
+                    }
+                });
+            });
+
+        // Add the filter buttons
+        new Setting(this.containerEl)
+            .setName("Plugins (register lazy ones here)")
+            .setHeading()
+            .setDesc("Filter by: ")
+            // Add the buttons to filter by startup method
+            .then((setting) => {
+                this.addFilterButton(setting.descEl, "All");
+                Object.keys(PluginModes).forEach((key) =>
+                    this.addFilterButton(
+                        setting.descEl,
+                        PluginModes[key as PluginMode],
+                        key as PluginMode,
+                    ),
+                );
+            });
+        new Setting(this.containerEl)
+            .then((setting) => {
+                this.resultsCountEl = setting.controlEl.createEl("span", {
+                    cls: "lazy-plugin-results-count",
+                });
+            })
+            // Add a free-text filter
+            .addText((text) =>
+                text.setPlaceholder("Type to filter list").onChange((value) => {
+                    this.filterString = value;
+                    this.buildPluginList();
+                }),
+            );
+
+        // Add an element to contain the plugin list
+        this.pluginListContainer = this.containerEl.createEl("div");
+        this.buildPluginList();
+    }
+
+    buildPluginList() {
+        this.pluginListContainer.textContent = "";
+        let count = 0;
+        // Add the delay settings for each installed plugin
+        this.plugin.manifests.forEach((plugin) => {
+            const currentValue = this.plugin.getPluginMode(plugin.id);
+
+            // Filter the list of plugins if there is a filter specified
+            if (this.filterMethod && currentValue !== this.filterMethod) return;
+            if (
+                this.filterString &&
+                !plugin.name
+                    .toLowerCase()
+                    .includes(this.filterString.toLowerCase())
+            )
+                return;
+
+            count++;
+            const setting = new Setting(this.pluginListContainer)
+                .setName(plugin.name)
+                .addDropdown((dropdown) => {
+                    this.dropdowns.push(dropdown);
+                    this.addModeOptions(dropdown);
+                    dropdown
+                        .setValue(currentValue)
+                        .onChange(async (value: PluginMode) => {
+                            // Update the config, and defer apply until user confirms
+                            this.pluginSettings[plugin.id] = {
+                                mode: value,
+                                userConfigured: true,
+                            };
+                            this.ensurelazyOnViewEntry(plugin.id, value);
+                            this.pendingPluginIds.add(plugin.id);
+                            this.updateApplyButton();
+                            this.buildPluginList(); // Rebuild to show/hide view types input
+                        });
+                });
+
+            // if (currentValue === "lazyOnView") {
+            //   setting.addText((text) => {
+            //     text
+            //       .setPlaceholder("view-type-1, view-type-2")
+            //       .setValue(
+            //         (this.onDemandPlugin.settings.lazyOnViews?.[plugin.id] || []).join(
+            //           ", ",
+            //         ),
+            //       )
+            //       .onChange(async (value) => {
+            //         const viewTypes = value
+            //           .split(",")
+            //           .map((t) => t.trim())
+            //           .filter((t) => t.length > 0);
+            //         if (!this.onDemandPlugin.settings.lazyOnViews) {
+            //           this.onDemandPlugin.settings.lazyOnViews = {};
+            //         }
+            //         this.onDemandPlugin.settings.lazyOnViews[plugin.id] = viewTypes;
+            //         await this.onDemandPlugin.saveSettings();
+            //       });
+            //   });
+            // }
+
+            setting.then((setting) => {
+                if (this.plugin.settings.showDescriptions) {
+                    // Show or hide the plugin description depending on the user's choice
+                    setting.setDesc(plugin.description);
+                }
+            });
+        });
+
+        if (this.resultsCountEl) {
+            this.resultsCountEl.setText(`${count} plugins`);
+        }
+    }
+
+    private ensurelazyOnViewEntry(pluginId: string, mode: PluginMode) {
+        if (!this.plugin.settings.lazyOnViews) {
+            this.plugin.settings.lazyOnViews = {};
+        }
+        if (mode === "lazyOnView") {
+            if (!this.plugin.settings.lazyOnViews[pluginId]) {
+                this.plugin.settings.lazyOnViews[pluginId] = [];
+            }
+            return;
+        }
+
+        if (this.plugin.settings.lazyOnViews[pluginId]) {
+            delete this.plugin.settings.lazyOnViews[pluginId];
+        }
+    }
+
+    private normalizelazyOnViews() {
+        if (!this.plugin.settings.lazyOnViews) {
+            this.plugin.settings.lazyOnViews = {};
+        }
+
+        const lazyOnViews = this.plugin.settings.lazyOnViews;
+        this.plugin.manifests.forEach((plugin) => {
+            const mode = this.plugin.getPluginMode(plugin.id);
+            if (mode === "lazyOnView") {
+                if (!lazyOnViews[plugin.id]) {
+                    lazyOnViews[plugin.id] = [];
+                }
+                return;
+            }
+
+            if (lazyOnViews[plugin.id]) {
+                delete lazyOnViews[plugin.id];
+            }
+        });
+    }
+
+    /**
+     * Add the dropdown select options for each delay type
+     */
+    addModeOptions(el: DropdownComponent) {
+        Object.keys(PluginModes).forEach((key) => {
+            el.addOption(key, PluginModes[key as PluginMode]);
+        });
+    }
+
+    /**
+     * Add a filter button in the header of the plugin list
+     */
+    addFilterButton(el: HTMLElement, text: string, value?: PluginMode) {
+        const link = el.createEl("button", { text });
+        link.addClass("lazy-plugin-filter");
+        link.onclick = () => {
+            this.filterMethod = value;
+            this.buildPluginList();
+        };
+    }
+
+    updateApplyButton() {
+        if (!this.applyButton) return;
+        const count = this.pendingPluginIds.size;
+        this.applyButton.setDisabled(count === 0);
+        this.applyButton.setButtonText(
+            count === 0 ? "Apply changes" : `Apply changes (${count}) & restart Obsidian`,
+        );
+    }
 }

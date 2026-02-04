@@ -2,3 +2,13 @@
     margin: 4px;
     font-size: 90%;
 }
+
+.lazy-plugin-results-count {
+    margin-right: 1em;
+    color: var(--text-muted);
+    font-size: 0.8em;
+}
+
+.lazy-plugin-progress-bar {
+    width: 100%;
+}
