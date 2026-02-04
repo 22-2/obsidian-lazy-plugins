@@ -45,8 +45,8 @@ jobs:
             - name: Install dependencies
               run: pnpm install
 
-            - name: Setup Electron
-              run: node node_modules/electron/install.js
+            # - name: Setup Electron
+            #   run: node node_modules/electron/install.js
 
 
             - name: Install Playwright browsers (Unix)
