@@ -1,69 +1,68 @@
 name: E2E Tests
 
 on:
-  push:
-    branches: [ main, dev ]
-  pull_request:
-    branches: [ main, dev ]
+    push:
+        branches: [main, dev]
+    pull_request:
+        branches: [main, dev]
 
 jobs:
-  e2e:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [macos-latest, windows-latest]
+    e2e:
+        runs-on: ${{ matrix.os }}
+        strategy:
+            matrix:
+                os: [macos-latest, windows-latest]
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v5
 
+            - name: Setup pnpm (action)
+              uses: pnpm/action-setup@v4
+              with:
+                  version: "10"
 
-      - name: Setup pnpm (action)
-        uses: pnpm/action-setup@v4
-        with:
-          version: '10'
+            - name: Setup Node
+              uses: actions/setup-node@v5
+              with:
+                  node-version: "23.x"
+                  cache: "pnpm"
 
-      - name: Setup Node
-        uses: actions/setup-node@v5
-        with:
-          node-version: '23.x'
-          cache: 'pnpm'
+            - name: Ensure pnpm (Unix)
+              if: matrix.os != 'windows-latest'
+              run: |
+                  npm install -g pnpm@10 || corepack prepare pnpm@10 --activate
+                  pnpm -v
+              shell: bash
 
-      - name: Ensure pnpm (Unix)
-        if: matrix.os != 'windows-latest'
-        run: |
-          npm install -g pnpm@10 || corepack prepare pnpm@10 --activate
-          pnpm -v
-        shell: bash
+            - name: Ensure pnpm (Windows)
+              if: matrix.os == 'windows-latest'
+              run: |
+                  npm install -g pnpm@10 -s
+                  pnpm -v
+              shell: pwsh
 
-      - name: Ensure pnpm (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          npm install -g pnpm@10 -s
-          pnpm -v
-        shell: pwsh
+            - name: Install dependencies
+              run: pnpm install
 
-      - name: Install dependencies
-        run: pnpm install
+            - name: Install Playwright browsers (Unix)
+              if: matrix.os != 'windows-latest'
+              run: pnpm exec playwright install
+              shell: bash
 
-      - name: Install Playwright browsers (Unix)
-        if: matrix.os != 'windows-latest'
-        run: pnpm exec playwright install
-        shell: bash
+            - name: Install Playwright browsers (Windows)
+              if: matrix.os == 'windows-latest'
+              run: pnpm exec playwright install
+              shell: pwsh
 
-      - name: Install Playwright browsers (Windows)
-        if: matrix.os == 'windows-latest'
-        run: pnpm exec playwright install
-        shell: pwsh
+            - name: Run E2E tests
+              env:
+                  CI: true
+              run: pnpm run test:e2e
 
-      - name: Run E2E tests
-        env:
-          CI: true
-        run: pnpm run test:e2e
-
-      - name: Upload Playwright report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: playwright-report
+            - name: Upload Playwright report
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: playwright-report
+                  path: playwright-report
