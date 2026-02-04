@@ -38,7 +38,7 @@ jobs:
       - name: Ensure pnpm (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          npm install -g pnpm@8 -s
+          npm install -g pnpm@10 -s
           pnpm -v
         shell: pwsh
 
