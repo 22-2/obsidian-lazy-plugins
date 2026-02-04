@@ -32,18 +32,18 @@ export class StartupPolicyService {
 
     constructor(private deps: StartupPolicyDeps) {}
 
-    async apply(showProgress = false, pluginIds?: string[]) {
+    async apply(pluginIds?: string[]) {
         if (this.startupPolicyLock) {
             this.startupPolicyPending = true;
             await this.startupPolicyLock;
             if (this.startupPolicyPending) {
                 this.startupPolicyPending = false;
-                await this.apply(showProgress, pluginIds);
+                await this.apply(pluginIds);
             }
             return;
         }
 
-        this.startupPolicyLock = this.runApply(showProgress, pluginIds);
+        this.startupPolicyLock = this.runApply(pluginIds);
         try {
             await this.startupPolicyLock;
         } finally {
@@ -52,11 +52,11 @@ export class StartupPolicyService {
 
         if (this.startupPolicyPending) {
             this.startupPolicyPending = false;
-            await this.apply(showProgress);
+            await this.apply();
         }
     }
 
-    private async runApply(showProgress: boolean, pluginIds?: string[]) {
+    private async runApply(pluginIds?: string[]) {
         await this.debounce();
 
         const manifests = this.deps.getManifests();
@@ -67,14 +67,13 @@ export class StartupPolicyService {
         );
         const lazyManifests = this.getLazyManifests(targetManifests);
 
-        let progress: ProgressDialog | null = null;
         let cancelled = false;
-
-        if (showProgress) {
-            progress = this.createProgressDialog(lazyManifests.length, () => {
+        const progress = this.createProgressDialog(
+            lazyManifests.length,
+            () => {
                 cancelled = true;
-            });
-        }
+            },
+        );
 
         const lazyOnViews: Record<string, string[]> = {
             ...(this.deps.getlazyOnViews() ?? {}),
@@ -82,24 +81,17 @@ export class StartupPolicyService {
         const viewRegistryCleanup = this.patchViewRegistry(lazyOnViews);
 
         try {
-            if (!showProgress) {
-                await this.applyWithoutProgress(
-                    targetManifests,
-                    progress,
-                );
-            } else {
-                await this.applyWithProgress(
-                    lazyManifests,
-                    targetPluginIds,
-                    progress,
-                    () => cancelled,
-                );
-            }
+            await this.applyWithProgress(
+                lazyManifests,
+                targetPluginIds,
+                progress,
+                () => cancelled,
+            );
         } finally {
             await this.finalize(
                 viewRegistryCleanup,
                 lazyOnViews,
-                showProgress && !cancelled,
+                !cancelled,
                 progress,
             );
         }

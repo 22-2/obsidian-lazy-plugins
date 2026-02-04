@@ -236,7 +236,7 @@ export default class OnDemandPlugin extends Plugin {
     async initializeCommandCache(options?: { force?: boolean }) {
         const force = options?.force ?? false;
         await this.commandCacheService.refreshCommandCache(undefined, force);
-        await this.applyStartupPolicy(true);
+        await this.applyStartupPolicy();
         this.commandCacheService.registerCachedCommands();
     }
 
@@ -267,8 +267,8 @@ export default class OnDemandPlugin extends Plugin {
             : null;
     }
 
-    async applyStartupPolicy(showProgress = false, pluginIds?: string[]) {
-        await this.startupPolicyService.apply(showProgress, pluginIds);
+    async applyStartupPolicy(pluginIds?: string[]) {
+        await this.startupPolicyService.apply(pluginIds);
     }
 
     async applyPluginState(pluginId: string) {
