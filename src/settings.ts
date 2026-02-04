@@ -223,6 +223,27 @@ export class SettingsTab extends PluginSettingTab {
         //   });
 
         new Setting(this.containerEl)
+            .setName("Force rebuild command cache")
+            .setDesc("Force a rebuild of the cached commands for lazy plugins.")
+            .addButton((button) => {
+                button.setButtonText("Rebuild cache");
+                button
+                button.onClick(() => {
+                    void (async () => {
+                        button.setDisabled(true);
+                        try {
+                            await this.plugin.initializeCommandCache(true);
+                        } catch (e) {
+                            new Notice("Failed to rebuild command cache");
+                            logger.error(e);
+                        } finally {
+                            button.setDisabled(false);
+                        }
+                    })();
+                });
+            });
+
+        new Setting(this.containerEl)
             .setName("Apply pending changes")
             .setDesc("Plugin mode changes are queued until you apply them.")
             .addButton((button) => {
@@ -242,26 +263,6 @@ export class SettingsTab extends PluginSettingTab {
                     })();
                 });
                 this.updateApplyButton();
-            });
-
-        new Setting(this.containerEl)
-            .setName("Force rebuild command cache")
-            .setDesc("Force a rebuild of the cached commands for lazy plugins.")
-            .addButton((button) => {
-                button.setButtonText("Rebuild cache");
-                button.onClick(() => {
-                    void (async () => {
-                        button.setDisabled(true);
-                        try {
-                            await this.plugin.initializeCommandCache(true);
-                        } catch (e) {
-                            new Notice("Failed to rebuild command cache");
-                            logger.error(e);
-                        } finally {
-                            button.setDisabled(false);
-                        }
-                    })();
-                });
             });
 
         // Add the filter buttons
