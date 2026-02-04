@@ -17,13 +17,15 @@
 	"keywords": [],
 	"author": "22-2",
 	"license": "MIT",
-    "pnpm": {
-        "onlyBuiltDependencies": ["electron", "obsidian-e2e-toolkit"]
-    },
+	"pnpm": {
+		"onlyBuiltDependencies": [
+			"electron",
+			"obsidian-e2e-toolkit"
+		]
+	},
 	"dependencies": {
 		"loglevel": "^1.9.2",
-		"monkey-around": "^3.0.0",
-		"obsidian-e2e-toolkit": "github:22-2/obsidian-e2e-toolkit"
+		"monkey-around": "^3.0.0"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.58.1",
