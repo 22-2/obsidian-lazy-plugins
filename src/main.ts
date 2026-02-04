@@ -119,7 +119,6 @@ export default class OnDemandPlugin extends Plugin {
                 this.lazyRunner.ensurePluginLoaded(pluginId),
             syncCommandWrappersForPlugin: (pluginId) =>
                 this.commandCacheService.syncCommandWrappersForPlugin(pluginId),
-            isLayoutReady: () => this.layoutReady,
         });
 
         this.commandCacheService.loadFromData();

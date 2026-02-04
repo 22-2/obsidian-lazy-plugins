@@ -9,7 +9,6 @@ interface ViewLazyLoaderDeps {
     getLazyOnViews: () => Record<string, string[]> | undefined;
     ensurePluginLoaded: (pluginId: string) => Promise<boolean>;
     syncCommandWrappersForPlugin: (pluginId: string) => void;
-    isLayoutReady: () => boolean;
 }
 
 export class ViewLazyLoader {
@@ -52,7 +51,7 @@ export class ViewLazyLoader {
 
     async checkViewTypeForLazyLoading(viewType: string): Promise<void> {
         if (!viewType) return;
-        if (!this.deps.isLayoutReady()) return;
+        if (!this.deps.app.workspace.layoutReady) return;
 
         const lazyOnViews = this.deps.getLazyOnViews() || {};
         for (const [pluginId, viewTypes] of Object.entries(lazyOnViews)) {
