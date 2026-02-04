@@ -233,9 +233,9 @@ export default class OnDemandPlugin extends Plugin {
         return this.registry.isPluginEnabledOnDisk(pluginId);
     }
 
-    async initializeCommandCache() {
-        await this.commandCacheService.refreshCommandCache();
-        await this.applyStartupPolicy();
+    async initializeCommandCache(force = false) {
+        await this.commandCacheService.refreshCommandCache(undefined, force);
+        await this.applyStartupPolicy(force);
         this.commandCacheService.registerCachedCommands();
     }
 

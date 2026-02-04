@@ -253,8 +253,7 @@ export class SettingsTab extends PluginSettingTab {
                     void (async () => {
                         button.setDisabled(true);
                         try {
-                            await this.plugin.initializeCommandCache();
-                            new Notice("Command cache rebuilt");
+                            await this.plugin.initializeCommandCache(true);
                         } catch (e) {
                             new Notice("Failed to rebuild command cache");
                             logger.error(e);

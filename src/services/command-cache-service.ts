@@ -72,7 +72,7 @@ export class CommandCacheService {
         });
     }
 
-    async refreshCommandCache(pluginIds?: string[]) {
+    async refreshCommandCache(pluginIds?: string[], force = false) {
         let updated = false;
         const manifests = this.deps.getManifests();
         const targetPluginIds =
@@ -83,7 +83,7 @@ export class CommandCacheService {
         for (const plugin of targetManifests) {
             const mode = this.deps.getPluginMode(plugin.id);
             if (mode === "lazy" || mode === "lazyOnView") {
-                if (this.isCommandCacheValid(plugin.id)) continue;
+                if (!force && this.isCommandCacheValid(plugin.id)) continue;
                 updated =
                     (await this.refreshCommandsForPlugin(plugin.id)) || updated;
             }
