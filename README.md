@@ -14,11 +14,18 @@ Lazy load plugins by caching their commands. Plugins are enabled on-demand when 
 	- **Lazy on view**: Loads when a specific view type is opened.
 	- **Always enabled**: Loads normally at startup.
 	- **Disabled**: Keeps the plugin off.
-3. Click **Apply changes** to activate your selections.
-4. (Optional) Set **Default behavior for new plugins** at the top of the settings page.
+3. Click **Apply changes**. **Obsidian will automatically restart** to apply your selections.
 
-## ✨ Features
+## ✨ Features & How it works
 
+### How it works
+This plugin achieves dramatic startup speed improvements by:
+- Caching command information for configured plugins and registering "wrapper commands" instead of loading the actual plugin.
+- Skipping the initialization of lazy-loaded plugins during startup.
+- Dynamically loading the real plugin only when a cached command is triggered or a specific view is opened.
+- Directly modifying `.obsidian/community-plugins.json` during **Apply changes** to ensure stable bulk-switching of plugin states.
+
+### Key Features
 - **Command-based Loading**: Plugins are loaded only when you execute one of their commands.
 - **🖼️ View-based Loading**: Automatically load plugins when a specific view type is displayed. This is useful for plugins that enhance specific file types or views.
 - **Automatic View Type Detection**: When a plugin is set to **Lazy on view**, its view types are captured automatically during **Apply changes**. You do not need to enter view types manually.
