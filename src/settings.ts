@@ -18,7 +18,7 @@ export interface PluginSettings {
 
 // Settings per device (desktop/mobile)
 export interface DeviceSettings {
-    defaultMode: PluginMode;
+    // defaultMode: PluginMode;
     showDescriptions: boolean;
     reRegisterLazyCommandsOnDisable: boolean;
     plugins: { [pluginId: string]: PluginSettings };
@@ -26,7 +26,7 @@ export interface DeviceSettings {
 }
 
 export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
-    defaultMode: "disabled",
+    // defaultMode: "disabled",
     showDescriptions: true,
     reRegisterLazyCommandsOnDisable: true,
     plugins: {},
@@ -140,19 +140,19 @@ export class SettingsTab extends PluginSettingTab {
             .setName("Lazy command caching")
             .setHeading();
 
-        new Setting(this.containerEl)
-            .setName("Default behavior for new plugins")
-            .addDropdown((dropdown) => {
-                this.addModeOptions(dropdown);
-                dropdown
-                    .setValue(
-                        this.plugin.settings.defaultMode || "disabled",
-                    )
-                    .onChange((value: PluginMode) => {
-                        this.plugin.settings.defaultMode = value;
-                        void this.plugin.saveSettings();
-                    });
-            });
+        // new Setting(this.containerEl)
+        //     .setName("Default behavior for new plugins")
+        //     .addDropdown((dropdown) => {
+        //         this.addModeOptions(dropdown);
+        //         dropdown
+        //             .setValue(
+        //                 this.plugin.settings.defaultMode || "disabled",
+        //             )
+        //             .onChange((value: PluginMode) => {
+        //                 this.plugin.settings.defaultMode = value;
+        //                 void this.plugin.saveSettings();
+        //             });
+        //     });
 
         new Setting(this.containerEl)
             .setName("Show plugin descriptions")
