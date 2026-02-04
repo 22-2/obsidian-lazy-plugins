@@ -44,12 +44,11 @@ jobs:
 
             - name: Install dependencies
               env:
-                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: pnpm install
 
             # - name: Setup Electron
             #   run: node node_modules/electron/install.js
-
 
             - name: Install Playwright browsers (Unix)
               if: matrix.os != 'windows-latest'
@@ -60,6 +59,15 @@ jobs:
               if: matrix.os == 'windows-latest'
               run: pnpm exec playwright install
               shell: pwsh
+
+            - name: Ensure toolkit Obsidian is installed
+              run: |
+                  # remove previous unpack (avoid stale/corrupt artifacts)
+                  rm -rf "${{ github.workspace }}/.obsidian-e2e-toolkit"
+                  # run toolkit setup which downloads & unpacks Obsidian
+                  node "${{ github.workspace }}/node_modules/obsidian-e2e-toolkit/scripts/setup.mjs"
+              env:
+                  OBSIDIAN_E2E_TOOLKIT_HOME: ${{ github.workspace }}
 
             - name: Run E2E tests
               env:
