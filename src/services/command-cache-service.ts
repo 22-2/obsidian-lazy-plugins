@@ -77,35 +77,41 @@ export class CommandCacheService {
         force = false,
         onProgress?: (current: number, total: number, plugin: PluginManifest) => void,
     ) {
-        let updated = false;
-        const manifests = this.deps.getManifests();
-        const targetPluginIds =
-            pluginIds && pluginIds.length > 0 ? new Set(pluginIds) : null;
-        const targetManifests = targetPluginIds
-            ? manifests.filter((plugin) => targetPluginIds.has(plugin.id))
-            : manifests;
-        const lazyManifests = targetManifests.filter((plugin) => {
-            const mode = this.deps.getPluginMode(plugin.id);
-            return mode === "lazy" || mode === "lazyOnView";
-        });
+        const targetManifests = this.getTargetManifests(pluginIds);
+        const lazyManifests = targetManifests.filter((plugin) =>
+            this.isLazyMode(plugin.id),
+        );
         const total = lazyManifests.length;
-        let current = 0;
+        let updated = false;
 
-        for (const plugin of lazyManifests) {
+        for (let index = 0; index < lazyManifests.length; index += 1) {
+            const plugin = lazyManifests[index];
+            const current = index + 1;
             if (!force && this.isCommandCacheValid(plugin.id)) {
-                current += 1;
                 onProgress?.(current, total, plugin);
                 continue;
             }
+
             updated =
                 (await this.refreshCommandsForPlugin(plugin.id)) || updated;
-            current += 1;
             onProgress?.(current, total, plugin);
         }
 
-        if (updated) {
-            await this.persistCommandCache();
-        }
+        if (updated) await this.persistCommandCache();
+    }
+
+    private getTargetManifests(pluginIds?: string[]) {
+        const manifests = this.deps.getManifests();
+        const targetPluginIds =
+            pluginIds && pluginIds.length > 0 ? new Set(pluginIds) : null;
+        return targetPluginIds
+            ? manifests.filter((plugin) => targetPluginIds.has(plugin.id))
+            : manifests;
+    }
+
+    private isLazyMode(pluginId: string) {
+        const mode = this.deps.getPluginMode(pluginId);
+        return mode === "lazy" || mode === "lazyOnView";
     }
 
     async refreshCommandsForPlugin(pluginId: string): Promise<boolean> {
