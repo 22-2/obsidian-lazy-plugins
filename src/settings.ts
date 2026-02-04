@@ -247,8 +247,7 @@ export class SettingsTab extends PluginSettingTab {
             .addButton((button) => {
                 this.applyButton = button;
                 button.setButtonText("Apply changes");
-                button.onClick(() => {
-                    void (async () => {
+                button.onClick(async () => {
                         if (this.pendingPluginIds.size === 0) return;
                         this.normalizelazyOnViews();
                         await this.plugin.saveSettings();
@@ -257,7 +256,6 @@ export class SettingsTab extends PluginSettingTab {
                         );
                         this.pendingPluginIds.clear();
                         this.updateApplyButton();
-                    })();
                 });
                 this.updateApplyButton();
             });
