@@ -25,6 +25,18 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
+        with:
+          version: '8'
+
+      - name: Verify pnpm
+        run: pnpm -v
+        shell: bash
+        if: matrix.os != 'windows-latest'
+
+      - name: Verify pnpm (Windows)
+        run: pnpm -v
+        shell: pwsh
+        if: matrix.os == 'windows-latest'
 
       - name: Install dependencies
         run: pnpm install
