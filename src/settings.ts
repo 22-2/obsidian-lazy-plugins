@@ -184,7 +184,7 @@ export class SettingsTab extends PluginSettingTab {
             });
 
         new Setting(this.containerEl)
-            .setName("Re-register lazy commands on disable")
+            .setName("Re-register lazy commands/views on disable")
             .setDesc(
                 "When a lazy plugin is manually disabled, re-register its cached command wrappers so the commands remain available. Applies to both 'Lazy on command' and 'Lazy on view' modes.",
             )
