@@ -43,9 +43,9 @@ jobs:
               shell: pwsh
 
             - name: Install dependencies
-              run: pnpm install
               env:
                 GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: pnpm install
 
             # - name: Setup Electron
             #   run: node node_modules/electron/install.js
