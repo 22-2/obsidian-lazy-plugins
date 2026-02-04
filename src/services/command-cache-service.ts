@@ -1,4 +1,3 @@
-import { forEachAsync } from "es-toolkit";
 import { PluginManifest } from "obsidian";
 import { CommandCache, LazySettings, PluginMode } from "../settings";
 import { isPluginLoaded } from "../utils/utils";
@@ -100,12 +99,12 @@ export class CommandCacheService {
         const total = lazyManifests.length;
         let hasChanges = false;
 
-        await forEachAsync(pluginsToRefresh, async (plugin, index) => {
+        for (const plugin of pluginsToRefresh) {
             const current = lazyManifests.indexOf(plugin) + 1;
             const result = await this.refreshCommandsForPlugin(plugin.id);
             onProgress?.(current, total, plugin);
             if (result) hasChanges = true;
-        });
+        }
 
         if (hasChanges) {
             await this.persistCommandCache();

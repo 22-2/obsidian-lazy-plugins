@@ -187,22 +187,6 @@ export class StartupPolicyService {
         };
     }
 
-    private async applyWithoutProgress(
-        targetManifests: PluginManifest[],
-        progress: ProgressDialog | null,
-    ) {
-        for (let index = 0; index < targetManifests.length; index += 1) {
-            const plugin = targetManifests[index];
-            progress?.setStatus(`Applying ${plugin.name}`);
-            progress?.setProgress(index + 1);
-
-            if (this.deps.getPluginMode(plugin.id) === "lazyOnView") {
-                await this.deps.ensurePluginLoaded(plugin.id);
-            }
-            await this.deps.applyPluginState(plugin.id);
-        }
-    }
-
     private async applyWithProgress(
         lazyManifests: PluginManifest[],
         targetPluginIds: Set<string> | null,
