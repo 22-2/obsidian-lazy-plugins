@@ -82,7 +82,11 @@ export class CommandCacheService {
     async refreshCommandCache(
         pluginIds?: string[],
         force = false,
-        onProgress?: (current: number, total: number, plugin: PluginManifest) => void,
+        onProgress?: (
+            current: number,
+            total: number,
+            plugin: PluginManifest,
+        ) => void,
     ) {
         let lazyManifests = this.getLazyManifests();
         if (pluginIds?.length) {
@@ -90,11 +94,12 @@ export class CommandCacheService {
                 pluginIds.includes(plugin.id),
             );
         }
-        
-        const pluginsToRefresh = force 
-            ? lazyManifests 
-            : lazyManifests.filter((plugin) => !this.isCommandCacheValid(plugin.id)
-            );
+
+        const pluginsToRefresh = force
+            ? lazyManifests
+            : lazyManifests.filter(
+                  (plugin) => !this.isCommandCacheValid(plugin.id),
+              );
 
         const total = lazyManifests.length;
         let hasChanges = false;

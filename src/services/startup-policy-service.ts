@@ -73,12 +73,9 @@ export class StartupPolicyService {
         const lazyManifests = this.getLazyManifests(targetManifests);
 
         let cancelled = false;
-        const progress = this.createProgressDialog(
-            lazyManifests.length,
-            () => {
-                cancelled = true;
-            },
-        );
+        const progress = this.createProgressDialog(lazyManifests.length, () => {
+            cancelled = true;
+        });
 
         const lazyOnViews: Record<string, string[]> = {
             ...(this.deps.getlazyOnViews() ?? {}),
@@ -296,10 +293,7 @@ export class StartupPolicyService {
         while (true) {
             if (
                 pluginIds.every((pluginId) =>
-                    isPluginLoaded(
-                        this.deps.obsidianPlugins.plugins,
-                        pluginId,
-                    ),
+                    isPluginLoaded(this.deps.obsidianPlugins.plugins, pluginId),
                 )
             ) {
                 return true;

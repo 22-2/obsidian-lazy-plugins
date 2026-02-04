@@ -41,7 +41,9 @@ export function patchPluginEnableDisable(
                         shouldReRegister &&
                         (mode === "lazy" || mode === "lazyOnView")
                     ) {
-                        await commandCacheService.ensureCommandsCached(pluginId);
+                        await commandCacheService.ensureCommandsCached(
+                            pluginId,
+                        );
                         commandCacheService.registerCachedCommandsForPlugin(
                             pluginId,
                         );

@@ -7,7 +7,7 @@ export function sleep(ms: number) {
 
 export function toggleLoggerBy(
     level: LogLevelDesc,
-    filter: (name: string) => boolean = () => true
+    filter: (name: string) => boolean = () => true,
 ): void {
     Object.values(log.getLoggers())
         // @ts-expect-error - loglevel types don't expose name property
@@ -18,15 +18,18 @@ export function toggleLoggerBy(
 }
 
 export function rebuildLeafView(leaf: WorkspaceLeaf): Promise<void> {
-    return (leaf as unknown as { rebuildView(): Promise<void>; }).rebuildView();
+    return (leaf as unknown as { rebuildView(): Promise<void> }).rebuildView();
 }
 
 export function isLeafVisible(leaf: WorkspaceLeaf): boolean {
-    return (leaf as unknown as { isVisible(): boolean; }).isVisible();
+    return (leaf as unknown as { isVisible(): boolean }).isVisible();
 }
 
 export function checkViewIsGone(leaf: WorkspaceLeaf): boolean {
-    return !!(leaf as unknown as { emptyStateEl: HTMLElement; }).emptyStateEl && (leaf.view as unknown as { viewType: string; }).viewType !== "empty";
+    return (
+        !!(leaf as unknown as { emptyStateEl: HTMLElement }).emptyStateEl &&
+        (leaf.view as unknown as { viewType: string }).viewType !== "empty"
+    );
 }
 
 export function isPluginLoaded(
@@ -42,4 +45,3 @@ export function isPluginEnabled(
 ): boolean {
     return enabledPlugins.has(pluginId);
 }
-

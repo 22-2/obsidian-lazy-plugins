@@ -1,14 +1,13 @@
+import log from "loglevel";
 import {
     App,
     ButtonComponent,
     DropdownComponent,
+    Notice,
     PluginSettingTab,
     Setting,
-    Notice,
 } from "obsidian";
 import OnDemandPlugin from "./main";
-import log from "loglevel";
-import { ProgressDialog } from "./utils/progress";
 
 const logger = log.getLogger("OnDemandPlugin/SettingsTab");
 
@@ -101,10 +100,10 @@ export class SettingsTab extends PluginSettingTab {
         // but since the plugin has already been loaded, the new settings do not show up.
         await this.plugin.loadSettings();
         this.pluginSettings = this.plugin.settings.plugins;
-        
+
         // Set initial configuration for any newly installed plugins
         await this.plugin.setupDefaultPluginConfigurations();
-        
+
         this.pendingPluginIds.clear();
 
         this.buildDom();
@@ -192,8 +191,7 @@ export class SettingsTab extends PluginSettingTab {
             .addToggle((toggle) => {
                 toggle
                     .setValue(
-                        this.plugin.settings
-                            .reRegisterLazyCommandsOnDisable,
+                        this.plugin.settings.reRegisterLazyCommandsOnDisable,
                     )
                     .onChange((value) => {
                         this.plugin.settings.reRegisterLazyCommandsOnDisable =
@@ -229,15 +227,17 @@ export class SettingsTab extends PluginSettingTab {
             .addButton((button) => {
                 button.setButtonText("Rebuild cache");
                 button.onClick(async () => {
-                        button.setDisabled(true);
-                        try {
-                            await this.plugin.rebuildAndApplyCommandCache({ force: true });
-                        } catch (e) {
-                            new Notice("Failed to rebuild command cache");
-                            logger.error(e);
-                        } finally {
-                            button.setDisabled(false);
-                        }
+                    button.setDisabled(true);
+                    try {
+                        await this.plugin.rebuildAndApplyCommandCache({
+                            force: true,
+                        });
+                    } catch (e) {
+                        new Notice("Failed to rebuild command cache");
+                        logger.error(e);
+                    } finally {
+                        button.setDisabled(false);
+                    }
                 });
             });
 
@@ -248,14 +248,14 @@ export class SettingsTab extends PluginSettingTab {
                 this.applyButton = button;
                 button.setButtonText("Apply changes");
                 button.onClick(async () => {
-                        if (this.pendingPluginIds.size === 0) return;
-                        this.normalizelazyOnViews();
-                        await this.plugin.saveSettings();
-                        await this.plugin.applyStartupPolicy(
-                            Array.from(this.pendingPluginIds),
-                        );
-                        this.pendingPluginIds.clear();
-                        this.updateApplyButton();
+                    if (this.pendingPluginIds.size === 0) return;
+                    this.normalizelazyOnViews();
+                    await this.plugin.saveSettings();
+                    await this.plugin.applyStartupPolicy(
+                        Array.from(this.pendingPluginIds),
+                    );
+                    this.pendingPluginIds.clear();
+                    this.updateApplyButton();
                 });
                 this.updateApplyButton();
             });
@@ -432,7 +432,9 @@ export class SettingsTab extends PluginSettingTab {
         const count = this.pendingPluginIds.size;
         this.applyButton.setDisabled(count === 0);
         this.applyButton.setButtonText(
-            count === 0 ? "Apply changes" : `Apply changes (${count}) & restart Obsidian`,
+            count === 0
+                ? "Apply changes"
+                : `Apply changes (${count}) & restart Obsidian`,
         );
     }
 }

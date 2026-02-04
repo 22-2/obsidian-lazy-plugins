@@ -226,7 +226,7 @@ export default class OnDemandPlugin extends Plugin {
             return "keepEnabled";
         }
 
-        return /* this.settings.defaultMode ??  */"disabled";
+        return /* this.settings.defaultMode ??  */ "disabled";
     }
 
     isPluginEnabledOnDisk(pluginId: string): boolean {

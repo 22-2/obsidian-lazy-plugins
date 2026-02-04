@@ -17,7 +17,9 @@ export class PluginRegistry {
     ) {}
 
     getCommunityPluginsConfigFilePath(): string {
-        return normalizePath(this.app.vault.configDir + "/community-plugins.json");
+        return normalizePath(
+            this.app.vault.configDir + "/community-plugins.json",
+        );
     }
 
     updateManifests() {
