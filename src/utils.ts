@@ -3,7 +3,9 @@ import { WorkspaceLeaf } from "obsidian";
 
 export function sleep(ms: number) {
     return new Promise((resolve) => window.setTimeout(resolve, ms));
-}export function toggleLoggerBy(
+}
+
+export function toggleLoggerBy(
     level: LogLevelDesc,
     filter: (name: string) => boolean = () => true
 ): void {
