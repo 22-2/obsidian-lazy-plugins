@@ -1,19 +1,21 @@
 import log from "loglevel";
-import { around } from "monkey-around";
-import { Plugin, PluginManifest, ViewState, WorkspaceLeaf } from "obsidian";
+import { Plugin, PluginManifest } from "obsidian";
 import { Commands, Plugins } from "obsidian-typings";
 import { CommandCacheService } from "./services/command-cache-service";
 import { LazyCommandRunner } from "./services/lazy-command-runner";
 import { PluginRegistry } from "./services/plugin-registry";
 import { SettingsService } from "./services/settings-service";
 import { StartupPolicyService } from "./services/startup-policy-service";
+import { ViewLazyLoader } from "./services/view-lazy-loader";
+import { patchPluginEnableDisable } from "./patches/plugin-enable-disable";
+import { patchSetViewState } from "./patches/view-state";
 import {
     DeviceSettings,
     LazySettings,
     PluginMode,
     SettingsTab,
 } from "./settings";
-import { checkViewIsGone, isLeafVisible, rebuildLeafView, toggleLoggerBy } from "./utils";
+import { toggleLoggerBy } from "./utils";
 
 const logger = log.getLogger("OnDemandPlugin/OnDemandPlugin");
 
@@ -29,6 +31,7 @@ export default class OnDemandPlugin extends Plugin {
     private commandCacheService!: CommandCacheService;
     private lazyRunner!: LazyCommandRunner;
     private startupPolicyService!: StartupPolicyService;
+    private viewLazyLoader!: ViewLazyLoader;
 
     get obsidianPlugins() {
         // return (this.app as unknown as { plugins: any }).plugins;
@@ -107,134 +110,35 @@ export default class OnDemandPlugin extends Plugin {
         // await this.migrateSettings();
         this.addSettingTab(new SettingsTab(this.app, this));
 
+        this.viewLazyLoader = new ViewLazyLoader({
+            app: this.app,
+            registerEvent: this.registerEvent.bind(this),
+            getPluginMode: (pluginId) => this.getPluginMode(pluginId),
+            getLazyOnViews: () => this.settings.lazyOnViews,
+            ensurePluginLoaded: (pluginId) =>
+                this.lazyRunner.ensurePluginLoaded(pluginId),
+            syncCommandWrappersForPlugin: (pluginId) =>
+                this.commandCacheService.syncCommandWrappersForPlugin(pluginId),
+            isLayoutReady: () => this.layoutReady,
+        });
+
         this.commandCacheService.loadFromData();
         this.commandCacheService.registerCachedCommands();
-        this.patchPluginEnableDisable();
+        patchPluginEnableDisable({
+            register: this.register.bind(this),
+            obsidianPlugins: this.obsidianPlugins,
+            getPluginMode: (pluginId) => this.getPluginMode(pluginId),
+            settings: this.settings,
+            commandCacheService: this.commandCacheService,
+        });
         // DO NOT CALL THIS HERE TO AVOID UNINTENDED BEHAVIOR ON STARTUP
         // await this.initializeCommandCache();
-        this.patchSetViewState();
-        this.registerActiveLeafReload();
-    }
-    
-    private registerActiveLeafReload() {
-        this.registerEvent(
-            this.app.workspace.on(
-                "active-leaf-change",
-                this.initializeLazyViewForLeaf.bind(this),
-            ),
-        );
-
-        // Initial load
-        this.app.workspace.onLayoutReady(() => this.app.workspace.iterateAllLeaves((leaf) => {
-            void this.initializeLazyViewForLeaf(leaf);
-        }));
-    }
-    
-    async initializeLazyViewForLeaf(leaf: WorkspaceLeaf) {
-        // Avoid loading lazy-on-view plugins during layout restoration.
-        if (!this.app.workspace.layoutReady) return;
-        if (!leaf) return;
-        if (!isLeafVisible(leaf)) return;
-        // if (!checkViewIsGone(leaf)) return;
-        
-        const pluginId = this.getPluginIdForViewType(leaf.view.getViewType());
-        if (!pluginId) return;
-
-        if (this.getPluginMode(pluginId) !== "lazyOnView") return;
-
-        const loaded = await this.lazyRunner.ensurePluginLoaded(
-            pluginId,
-        );
-        if (!loaded) return;
-
-        // Force a view reconstruction after a lazy plugin is loaded, ensuring the view is properly initialized.
-        await rebuildLeafView(leaf);
-        this.commandCacheService.syncCommandWrappersForPlugin(pluginId);
-    }
-
-    private getPluginIdForViewType(viewType: string): string | null {
-        const lazyOnViews = this.settings.lazyOnViews || {};
-        for (const [pluginId, viewTypes] of Object.entries(lazyOnViews)) {
-            if (viewTypes.includes(viewType)) {
-                return pluginId;
-            }
-        }
-        return null;
-    }
-
-    private patchSetViewState() {
-        const plugin = this;
-
-        this.register(
-            around(WorkspaceLeaf.prototype, {
-                setViewState: (next: WorkspaceLeaf["setViewState"]) =>
-                    async function (
-                        this: WorkspaceLeaf,
-                        viewState: ViewState,
-                    ) {
-                        const result = await next.call(
-                            this,
-                            viewState,
-                        );
-                        if (viewState?.type) {
-                            await plugin.checkViewTypeForLazyLoading(viewState.type);
-                        }
-                        return result;
-                    },
-            }),
-        );
-    }
-
-    private patchPluginEnableDisable() {
-        const plugin = this;
-        const target = this.obsidianPlugins;
-
-        this.register(
-            around(target, {
-                enablePlugin: (next) =>
-                    async function (this: Plugins, pluginId: string) {
-                        const result = await next.call(this, pluginId);
-                        plugin.commandCacheService.syncCommandWrappersForPlugin(
-                            pluginId,
-                        );
-                        return result;
-                    },
-                disablePlugin: (next) =>
-                    async function (this: Plugins, pluginId: string) {
-                        const result = await next.call(this, pluginId);
-                        const mode = plugin.getPluginMode(pluginId);
-                        const shouldReRegister =
-                            plugin.settings.reRegisterLazyCommandsOnDisable ??
-                            true;
-                        if (
-                            shouldReRegister &&
-                            (mode === "lazy" || mode === "lazyOnView")
-                        ) {
-                            await plugin.commandCacheService.ensureCommandsCached(
-                                pluginId,
-                            );
-                            plugin.commandCacheService.registerCachedCommandsForPlugin(
-                                pluginId,
-                            );
-                        }
-                        return result;
-                    },
-            }),
-        );
-    }
-    async checkViewTypeForLazyLoading(viewType: string) {
-        if (!viewType) return;
-        if (!this.layoutReady) return;
-
-        const lazyOnViews = this.settings.lazyOnViews || {};
-        for (const [pluginId, viewTypes] of Object.entries(lazyOnViews)) {
-            if (viewTypes.includes(viewType)) {
-                const mode = this.getPluginMode(pluginId);
-                if (mode === "lazyOnView") {
-                    await this.lazyRunner.ensurePluginLoaded(pluginId);
-                }
-            }
-        }
+        patchSetViewState({
+            register: this.register.bind(this),
+            onViewType: (viewType) =>
+                this.viewLazyLoader.checkViewTypeForLazyLoading(viewType),
+        });
+        this.viewLazyLoader.registerActiveLeafReload();
     }
 
     onunload() {
