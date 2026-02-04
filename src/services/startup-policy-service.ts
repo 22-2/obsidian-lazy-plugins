@@ -1,7 +1,7 @@
 import { App, PluginManifest } from "obsidian";
 import log from "loglevel";
-import { ProgressDialog } from "../progress";
-import { ON_DEMAND_PLUGIN_ID } from "../constants";
+import { ProgressDialog } from "../utils/progress";
+import { ON_DEMAND_PLUGIN_ID } from "../utils/constants";
 import { PluginMode } from "../settings";
 import { Commands, Plugins } from "obsidian-typings";
 

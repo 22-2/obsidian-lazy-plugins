@@ -15,7 +15,7 @@ import {
     PluginMode,
     SettingsTab,
 } from "./settings";
-import { toggleLoggerBy } from "./utils";
+import { toggleLoggerBy } from "./utils/utils";
 
 const logger = log.getLogger("OnDemandPlugin/OnDemandPlugin");
 

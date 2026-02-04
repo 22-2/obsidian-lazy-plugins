@@ -1,6 +1,6 @@
 import { App, EventRef, WorkspaceLeaf } from "obsidian";
 import { PluginMode } from "../settings";
-import { isLeafVisible, rebuildLeafView } from "../utils";
+import { isLeafVisible, rebuildLeafView } from "../utils/utils";
 
 interface ViewLazyLoaderDeps {
     app: App;
