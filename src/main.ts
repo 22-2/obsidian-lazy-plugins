@@ -168,7 +168,7 @@ export default class OnDemandPlugin extends Plugin {
      * for any new plugin in the future, depending on what default value is chosen in the
      * Settings page.
      */
-    async setInitialPluginsConfiguration() {
+    async setupDefaultPluginConfigurations() {
         let hasChanges = false;
         for (const plugin of this.manifests) {
             const current = this.settings.plugins?.[plugin.id];

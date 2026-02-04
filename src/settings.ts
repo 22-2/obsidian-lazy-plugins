@@ -103,7 +103,7 @@ export class SettingsTab extends PluginSettingTab {
         this.pluginSettings = this.plugin.settings.plugins;
         
         // Set initial configuration for any newly installed plugins
-        await this.plugin.setInitialPluginsConfiguration();
+        await this.plugin.setupDefaultPluginConfigurations();
         
         this.pendingPluginIds.clear();
 
