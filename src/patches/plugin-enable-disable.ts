@@ -34,6 +34,7 @@ export function patchPluginEnableDisable(
                 async function (this: Plugins, pluginId: string) {
                     const result = await next.call(this, pluginId);
                     const mode = getPluginMode(pluginId);
+                    // Re-register lazy commands on disable applies to both "lazy" and "lazyOnView" modes
                     const shouldReRegister =
                         settings.reRegisterLazyCommandsOnDisable ?? true;
                     if (
