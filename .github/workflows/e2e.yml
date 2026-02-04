@@ -45,6 +45,10 @@ jobs:
             - name: Install dependencies
               run: pnpm install
 
+            - name: Setup Electron
+              run: node node_modules/electron/install.js
+
+
             - name: Install Playwright browsers (Unix)
               if: matrix.os != 'windows-latest'
               run: pnpm exec playwright install
