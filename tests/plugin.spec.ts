@@ -18,6 +18,6 @@ test.use({
 });
 
 test("plugin activation", async ({ obsidian }) => {
-    expect(await obsidian.isPluginEnabled("sample-plugin")).toBe(true);
-    expect(await obsidian.plugin("sample-plugin")).toBeTruthy();
+    expect(await obsidian.isPluginEnabled("obsidian42-brat")).toBe(true);
+    expect(await obsidian.plugin("obsidian42-brat")).toBeTruthy();
 });
