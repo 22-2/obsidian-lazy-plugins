@@ -58,7 +58,14 @@ export class CommandCacheService {
         let commandCacheSource = data.commandCache;
         if (!commandCacheSource) {
             const stored = loadJSON<CommandCache>(this.deps.app, "commandCache");
-            if (stored) commandCacheSource = stored;
+            if (stored) {
+                commandCacheSource = stored;
+                // If we fell back to local cache, try to hydrate versions too
+                const storedVersions = loadJSON<Record<string, string>>(this.deps.app, "commandCacheVersions");
+                if (storedVersions && !data.commandCacheVersions) {
+                    data.commandCacheVersions = storedVersions;
+                }
+            }
         }
         if (!commandCacheSource) return;
 
@@ -344,8 +351,9 @@ export class CommandCacheService {
         data.commandCacheUpdatedAt = Date.now();
         await this.deps.saveSettings();
 
-        // Also persist a local copy keyed by vault (appId) for faster/local retrieval
+        // Also persist local copies keyed by vault (appId) for faster/local retrieval
         saveJSON(this.deps.app, "commandCache", cache);
+        saveJSON(this.deps.app, "commandCacheVersions", versions);
     }
 
     clear() {
