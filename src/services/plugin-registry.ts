@@ -1,5 +1,6 @@
 import { App, Platform, PluginManifest, normalizePath } from "obsidian";
 import log from "loglevel";
+import writeFileAtomic from "write-file-atomic";
 import { ON_DEMAND_PLUGIN_ID } from "../utils/constants";
 
 const logger = log.getLogger("OnDemandPlugin/PluginRegistry");
@@ -69,12 +70,10 @@ export class PluginRegistry {
         enabledPlugins: string[],
         showConsoleLog?: boolean,
     ) {
-        const adapter = this.app.vault.adapter;
         const path = this.getCommunityPluginsConfigFilePath();
         const content = JSON.stringify(enabledPlugins, null, "\t");
-
         try {
-            await adapter.write(path, content);
+            await writeFileAtomic(path, content, { encoding: "utf8" });
         } catch (error) {
             if (showConsoleLog) {
                 logger.error("Failed to write community-plugins.json", error);
