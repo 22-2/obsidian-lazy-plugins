@@ -64,7 +64,7 @@ export type PluginMode = "disabled" | "lazy" | "keepEnabled" | "lazyOnView";
 export const PluginModes: Record<PluginMode, string> = {
     disabled: "⛔ Disabled",
     lazy: "Lazy on command",
-    lazyOnView: "Lazy on view",
+    lazyOnView: "Lazy on command/view",
     keepEnabled: "✅ Always enabled",
 };
 
