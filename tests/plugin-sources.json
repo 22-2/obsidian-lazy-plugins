@@ -1,21 +1,3 @@
 {
-    "advanced-cursors": "SkepticMystic/advanced-cursors",
-    "better-plugins-manager": "eondrcode/obsidian-manager",
-    "calendar": "liamcain/obsidian-calendar-plugin",
-    "compact-links": "uoFishbox/obsidian-compact-links",
-    "continuous-mode": "gasparschott/obsidian-continuous-mode",
-    "gemini-helper": "takeshy/obsidian-gemini-helper",
-    "graph-analysis": "SkepticMystic/graph-analysis",
-    "keyboard-analyzer": "cogscides/obsidian-keyboard-analyzer",
-    "lineage": "ycnmhd/obsidian-lineage",
-    "local-fast-vector-search-plugin": "uoFishbox/obsidian-local-fast-vector-search",
-    "notebook-navigator": "johansan/notebook-navigator",
-    "obsidian-another-quick-switcher": "tadashi-aikawa/obsidian-another-quick-switcher",
-    "obsidian-better-command-palette": "AlexBieg/obsidian-better-command-palette",
-    "obsidian-editor-shortcuts": "obsidian-editor-shortcuts",
-    "obsidian-excalidraw-plugin": "zsviczian/obsidian-excalidraw-plugin",
-    "obsidian-linter": "platers/obsidian-linter",
-    "obsidian-memos": "Quorafind/Obsidian-Thino",
-    "obsidian42-brat": "TfTHacker/obsidian42-brat",
-    "version-control": "Yuichi-Aragi/Version-Control"
+    "obsidian42-brat": "TfTHacker/obsidian42-brat"
 }
