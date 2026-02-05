@@ -1,40 +1,7 @@
-import path from "node:path";
-import fs from "node:fs";
 import { test, expect } from "obsidian-e2e-toolkit";
-import { fileURLToPath } from "url";
+import { repoRoot, pluginUnderTestId, targetPluginId, ensureBuilt, useOnDemandPlugins } from "./test-utils";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const repoRoot = path.resolve(__dirname, "..");
-const pluginUnderTestId = "on-demand-plugins";
-const targetPluginId = "obsidian42-brat";
-
-test.use({
-    vaultOptions: {
-        logLevel: "info",
-        fresh: true,
-        plugins: [
-            {
-                path: repoRoot,
-                pluginId: pluginUnderTestId,
-            },
-            {
-                path: path.resolve(repoRoot, "myfiles", targetPluginId),
-                pluginId: targetPluginId,
-            },
-        ],
-    },
-});
-
-function ensureBuilt() {
-    const mainJsPath = path.resolve(repoRoot, "main.js");
-    if (!fs.existsSync(mainJsPath)) {
-        test.skip(true, "main.js not found; run build before tests");
-        return false;
-    }
-    return true;
-}
+useOnDemandPlugins();
 
 test("lazyOnView loads plugin on view activation", async ({ obsidian }) => {
     if (!ensureBuilt()) return;
