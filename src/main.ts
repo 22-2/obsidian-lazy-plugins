@@ -82,6 +82,7 @@ export default class OnDemandPlugin extends Plugin {
                 this.lazyRunner.runLazyCommand(commandId),
             getData: () => this.data,
             saveSettings: () => this.saveSettings(),
+            app: this.app,
         });
 
         this.startupPolicyService = new StartupPolicyService({

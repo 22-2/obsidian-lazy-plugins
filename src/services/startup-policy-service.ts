@@ -1,4 +1,5 @@
 import { App, PluginManifest } from "obsidian";
+import { saveJSON } from "./storage";
 import log from "loglevel";
 import { ProgressDialog } from "../utils/progress";
 import { ON_DEMAND_PLUGIN_ID } from "../utils/constants";
@@ -249,6 +250,8 @@ export class StartupPolicyService {
             }
         }
         await this.deps.savelazyOnViews(lazyOnViews);
+        // Also persist lazy-on-view registry locally per-vault
+        saveJSON(this.deps.app, "lazyOnViews", lazyOnViews);
 
         const desiredEnabled = new Set<string>();
         this.deps.getManifests().forEach((plugin) => {

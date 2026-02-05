@@ -1,4 +1,5 @@
 import { Platform, Plugin } from "obsidian";
+import { loadJSON } from "./storage";
 import {
     DEFAULT_DEVICE_SETTINGS,
     DEFAULT_SETTINGS,
@@ -46,6 +47,17 @@ export class SettingsService {
         } else {
             this.settings = this.data.desktop;
             this.device = "desktop/global";
+        }
+
+        // Try to hydrate lazyOnViews from local store2 cache (vault-specific) if available
+        const stored = loadJSON<Record<string, string[]>>(this.plugin, "lazyOnViews");
+        if (stored && Object.keys(stored).length > 0) {
+            if (!this.data.desktop) this.data.desktop = DEFAULT_DEVICE_SETTINGS;
+            this.data.desktop.lazyOnViews = {
+                ...(this.data.desktop.lazyOnViews ?? {}),
+                ...(stored as { [k: string]: string[] }),
+            };
+            this.settings = this.data.desktop;
         }
     }
 

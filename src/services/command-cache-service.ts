@@ -1,4 +1,5 @@
-import { PluginManifest } from "obsidian";
+import { PluginManifest, App } from "obsidian";
+import { loadJSON, saveJSON } from "./storage";
 import { CommandCache, LazySettings, PluginMode } from "../settings";
 import { isPluginLoaded } from "../utils/utils";
 
@@ -35,6 +36,7 @@ interface CommandCacheDeps {
     runLazyCommand: (commandId: string) => Promise<void>;
     getData: () => LazySettings;
     saveSettings: () => Promise<void>;
+    app: App;
 }
 
 export class CommandCacheService {
@@ -52,12 +54,17 @@ export class CommandCacheService {
 
     loadFromData() {
         const data = this.deps.getData();
-        if (!data.commandCache) return;
+        // Prefer persisted settings data, but fall back to local store2 cache
+        let commandCacheSource = data.commandCache;
+        if (!commandCacheSource) {
+            const stored = loadJSON<CommandCache>(this.deps.app, "commandCache");
+            if (stored) commandCacheSource = stored;
+        }
+        if (!commandCacheSource) return;
 
         this.commandCache.clear();
         this.pluginCommandIndex.clear();
-
-        Object.entries(data.commandCache).forEach(([pluginId, commands]) => {
+        Object.entries(commandCacheSource).forEach(([pluginId, commands]) => {
             const ids = new Set<string>();
             commands.forEach((command) => {
                 const cached: CachedCommand = {
@@ -336,6 +343,9 @@ export class CommandCacheService {
         data.commandCacheVersions = versions;
         data.commandCacheUpdatedAt = Date.now();
         await this.deps.saveSettings();
+
+        // Also persist a local copy keyed by vault (appId) for faster/local retrieval
+        saveJSON(this.deps.app, "commandCache", cache);
     }
 
     clear() {
