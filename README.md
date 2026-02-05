@@ -34,8 +34,9 @@ This plugin achieves dramatic startup speed improvements by:
 ## 📷 Screenshot
 
 Add a screenshot of the On‑Demand Plugins settings page to make the setup clearer for reviewers and users.
-<!-- Replace with your screenshot file -->
-<!-- ![On‑Demand Plugins settings](docs/settings.png) -->
+<!-- Screenshot: On-Demand Plugins settings -->
+![On‑Demand Plugins settings](assets/ss.png)
+*On‑Demand Plugins 設定ページのスクリーンショット.*
 
 ## ⚠️ Recommended Usage & Warnings
 
