@@ -48,7 +48,7 @@ test("force rebuild refreshes command cache", async ({ obsidian }) => {
     const result = await pluginHandle.evaluate(async (plugin, pluginId) => {
         const beforeUpdatedAt = plugin.data?.commandCacheUpdatedAt ?? null;
         const original = app.commands.executeCommandById;
-        app.commands.executeCommandById = async () => undefined;
+        app.commands.executeCommandById = () => true;
 
         try {
             await plugin.updatePluginSettings(pluginId, "lazy");
@@ -81,7 +81,7 @@ test("lazyOnView loads plugin on view activation", async ({ obsidian }) => {
     const pluginHandle = await obsidian.plugin(pluginUnderTestId);
     const result = await pluginHandle.evaluate(async (plugin, pluginId) => {
         const original = app.commands.executeCommandById;
-        app.commands.executeCommandById = async () => undefined;
+        app.commands.executeCommandById = () => true;
 
         try {
             await plugin.updatePluginSettings(pluginId, "lazyOnView");

@@ -12,7 +12,7 @@ test("force rebuild refreshes command cache", async ({ obsidian }) => {
     const result = await pluginHandle.evaluate(async (plugin, pluginId) => {
         const beforeUpdatedAt = plugin.data?.commandCacheUpdatedAt ?? null;
         const original = app.commands.executeCommandById;
-        app.commands.executeCommandById = async () => undefined;
+        app.commands.executeCommandById = () => true;
 
         try {
             await plugin.updatePluginSettings(pluginId, "lazy");
