@@ -17,7 +17,7 @@ const logger = log.getLogger("OnDemandPlugin/OnDemandPlugin");
  * Create a PluginContext adapter that bridges the Obsidian Plugin instance
  * to the PluginContext interface used by all services.
  */
-function createPluginContext(plugin: OnDemandPlugin): PluginContext & { _plugin: Plugin } {
+function createPluginContext(plugin: OnDemandPlugin): PluginContext {
     return {
         _plugin: plugin,
         get app() { return plugin.app; },

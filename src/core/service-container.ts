@@ -16,7 +16,6 @@ import { ViewLazyLoader } from "../features/view-loader/view-lazy-loader";
 import { patchPluginEnableDisable } from "../patches/plugin-enable-disable";
 import { patchSetViewState } from "../patches/view-state";
 import { registerExcalidrawWrapper } from "../patches/excalidraw-wrapper";
-import { PluginMode } from "./types";
 
 export class ServiceContainer {
     readonly registry: PluginRegistry;
@@ -33,7 +32,7 @@ export class ServiceContainer {
         // 2. Settings (no service deps)
         this.settingsService = new SettingsService(
             // SettingsService expects a Plugin, we pass it through the context adapter
-            (ctx as any)._plugin,
+            ctx._plugin,
         );
 
         // 3. LazyCommandRunner (needs PluginContext only at construction)

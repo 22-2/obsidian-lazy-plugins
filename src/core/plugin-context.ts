@@ -8,7 +8,7 @@
 import { App, PluginManifest } from "obsidian";
 import { Commands, Plugins } from "obsidian-typings";
 import { DeviceSettings, LazySettings, PluginMode } from "./types";
-import { PluginsMap } from "../utils/utils";
+import OnDemandPlugin from "src/main";
 
 /**
  * Minimal view of Obsidian's `Commands` object used by services.
@@ -46,6 +46,7 @@ export interface PluginContext {
     readonly app: App;
     readonly obsidianPlugins: Plugins;
     readonly obsidianCommands: Commands;
+    readonly _plugin : OnDemandPlugin
 
     /** Get all plugin manifests (excluding self and platform-filtered). */
     getManifests(): PluginManifest[];

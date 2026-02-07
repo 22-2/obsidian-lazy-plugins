@@ -12,7 +12,7 @@ function isExcalidrawFile(app: App, file: TFile | null | undefined): boolean {
     try {
         if (file.extension === "excalidraw") return true;
         // also treat files with frontmatter key `excalidraw-plugin` as Excalidraw
-        const cache = app.metadataCache.getFileCache(file as any);
+        const cache = app.metadataCache.getFileCache(file);
         return !!cache?.frontmatter && Object.prototype.hasOwnProperty.call(cache.frontmatter, "excalidraw-plugin");
     } catch (e) {
         return false;
