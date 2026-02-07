@@ -2,6 +2,7 @@ import { around } from "monkey-around";
 import { Plugins } from "obsidian-typings";
 import { PluginContext } from "../core/plugin-context";
 import { CommandCacheService } from "../features/command-cache/command-cache-service";
+import { markManualDisabled } from "../utils/manual-disable";
 
 export function patchPluginEnableDisable(
     ctx: PluginContext,
@@ -39,6 +40,11 @@ export function patchPluginEnableDisable(
                             pluginId,
                         );
                     }
+                    // Record that the user manually disabled this plugin at runtime
+                    // so other parts of the system can avoid immediately re-enabling it.
+                    try {
+                        markManualDisabled(pluginId);
+                    } catch {}
                     return result;
                 },
         }),

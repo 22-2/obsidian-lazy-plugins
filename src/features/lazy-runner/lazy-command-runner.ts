@@ -8,6 +8,7 @@ import { ViewRegistry } from "obsidian-typings";
 import { PluginContext } from "../../core/plugin-context";
 import { CommandRegistry, PluginLoader } from "../../core/interfaces";
 import { isPluginLoaded, isPluginEnabled } from "../../utils/utils";
+import { wasManuallyDisabledRecently } from "src/utils/manual-disable";
 
 const logger = log.getLogger("OnDemandPlugin/LazyCommandRunner");
 
@@ -95,6 +96,17 @@ export class LazyCommandRunner implements PluginLoader {
                 if (!this.ctx.isPluginEnabledOnDisk(pluginId)) {
                     return false;
                 }
+
+                // Also avoid auto-enabling if the user manually disabled the plugin
+                // very recently at runtime (short cooldown). This guards against the
+                // case where a view remains open and some loader tries to reload it
+                // immediately after the user hit "disable".
+                try {
+                    // eslint-disable-next-line @typescript-eslint/no-var-requires
+                    if (wasManuallyDisabledRecently(pluginId)) {
+                        return false;
+                    }
+                } catch {}
 
                 await this.ctx.obsidianPlugins.enablePlugin(pluginId);
                 const loadSuccess = await this.waitForPluginLoaded(pluginId);
