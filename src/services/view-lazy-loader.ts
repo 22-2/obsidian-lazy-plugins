@@ -12,6 +12,10 @@ interface ViewLazyLoaderDeps {
 }
 
 export class ViewLazyLoader {
+    private inFlightLeaves = new WeakSet<WorkspaceLeaf>();
+    private lastProcessed = new WeakMap<WorkspaceLeaf, { viewType: string; at: number }>();
+    private readonly reentryWindowMs = 1000;
+
     constructor(private deps: ViewLazyLoaderDeps) {}
 
     registerActiveLeafReload(): void {
@@ -36,7 +40,15 @@ export class ViewLazyLoader {
         if (!leaf) return;
         if (!isLeafVisible(leaf)) return;
 
-        const pluginId = this.getPluginIdForViewType(leaf.view.getViewType());
+        if (this.inFlightLeaves.has(leaf)) return;
+
+        const viewType = leaf.view.getViewType();
+        const last = this.lastProcessed.get(leaf);
+        if (last && last.viewType === viewType && Date.now() - last.at < this.reentryWindowMs) {
+            return;
+        }
+
+        const pluginId = this.getPluginIdForViewType(viewType);
         if (!pluginId) return;
 
         if (this.deps.getPluginMode(pluginId) !== "lazyOnView") return;
@@ -45,20 +57,26 @@ export class ViewLazyLoader {
         const plugins = (this.deps.app as unknown as { plugins?: PluginsMap }).plugins;
         const wasLoaded = isPluginLoaded(plugins, pluginId);
 
-        const loaded = await this.deps.ensurePluginLoaded(pluginId);
-        if (!loaded) return;
+        this.inFlightLeaves.add(leaf);
+        try {
+            const loaded = await this.deps.ensurePluginLoaded(pluginId);
+            if (!loaded) return;
 
-        // Only reconstruct the view if the plugin was not already loaded before this call.
-        if (!wasLoaded) {
-            await rebuildLeafView(leaf);
-            try {
-            } catch (e) {
-                // Keep behaviour consistent with other callers: don't throw on rebuild failure
-                // (logging is handled elsewhere)
+            // Only reconstruct the view if the plugin was not already loaded before this call.
+            if (!wasLoaded) {
+                await rebuildLeafView(leaf);
+                try {
+                } catch (e) {
+                    // Keep behaviour consistent with other callers: don't throw on rebuild failure
+                    // (logging is handled elsewhere)
+                }
             }
-        }
 
-        this.deps.syncCommandWrappersForPlugin(pluginId);
+            this.deps.syncCommandWrappersForPlugin(pluginId);
+        } finally {
+            this.inFlightLeaves.delete(leaf);
+            this.lastProcessed.set(leaf, { viewType, at: Date.now() });
+        }
     }
 
     async checkViewTypeForLazyLoading(viewType: string): Promise<void> {
