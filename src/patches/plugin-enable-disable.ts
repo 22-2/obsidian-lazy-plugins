@@ -1,31 +1,18 @@
 import { around } from "monkey-around";
 import { Plugins } from "obsidian-typings";
-import { DeviceSettings, PluginMode } from "../settings";
-import { CommandCacheService } from "../services/command-cache-service";
-
-interface PatchPluginEnableDisableDeps {
-    register: (unload: () => void) => void;
-    obsidianPlugins: Plugins;
-    getPluginMode: (pluginId: string) => PluginMode;
-    settings: DeviceSettings;
-    commandCacheService: CommandCacheService;
-}
+import { PluginContext } from "../core/plugin-context";
+import { CommandCacheService } from "../features/command-cache/command-cache-service";
 
 export function patchPluginEnableDisable(
-    deps: PatchPluginEnableDisableDeps,
+    ctx: PluginContext,
+    commandCacheService: CommandCacheService,
 ): void {
-    const {
-        register,
-        obsidianPlugins,
-        getPluginMode,
-        settings,
-        commandCacheService,
-    } = deps;
+    const obsidianPlugins = ctx.obsidianPlugins as unknown as Plugins;
 
     // Monkey-patch `Plugins.enablePlugin` / `Plugins.disablePlugin` to handle
     // when a user manually enables or disables a plugin: update the command
     // cache and re-register lazy commands as needed.
-    register(
+    ctx.register(
         around(obsidianPlugins, {
             enablePlugin: (next) =>
                 async function (this: Plugins, pluginId: string) {
@@ -36,8 +23,9 @@ export function patchPluginEnableDisable(
             disablePlugin: (next) =>
                 async function (this: Plugins, pluginId: string) {
                     const result = await next.call(this, pluginId);
-                    const mode = getPluginMode(pluginId);
+                    const mode = ctx.getPluginMode(pluginId);
                     // Re-register lazy commands on disable applies to both "lazy" and "lazyOnView" modes
+                    const settings = ctx.getSettings();
                     const shouldReRegister =
                         settings.reRegisterLazyCommandsOnDisable ?? true;
                     if (

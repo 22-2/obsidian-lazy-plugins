@@ -1,19 +1,20 @@
-import { Platform, Plugin } from "obsidian";
-import { loadJSON } from "./storage";
+import { Platform } from "obsidian";
+import OnDemandPlugin from "src/main";
+import { loadJSON } from "../../core/storage";
 import {
     DEFAULT_DEVICE_SETTINGS,
     DEFAULT_SETTINGS,
     DeviceSettings,
     LazySettings,
     PluginMode,
-} from "../settings";
+} from "../../core/types";
 
 export class SettingsService {
     data: LazySettings;
     settings: DeviceSettings;
     device = "desktop/global";
 
-    constructor(private plugin: Plugin) {}
+    constructor(private plugin: OnDemandPlugin) {}
 
     async load() {
         this.data = Object.assign(

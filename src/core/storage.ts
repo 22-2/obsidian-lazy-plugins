@@ -1,4 +1,7 @@
-import type { App } from "obsidian";
+/**
+ * Vault-scoped JSON persistence using store2.
+ * Unchanged from original — just moved to core/.
+ */
 import store from "store2";
 import invariant from "tiny-invariant";
 
