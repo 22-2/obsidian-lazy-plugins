@@ -6,6 +6,9 @@ import { ON_DEMAND_PLUGIN_ID } from "../utils/constants";
 import { isPluginLoaded, isPluginEnabled, PluginsMap } from "../utils/utils";
 import { PluginMode } from "../settings";
 import { Commands, Plugins } from "obsidian-typings";
+import { Mutex } from "async-mutex";
+import pDebounce from "p-debounce";
+import pWaitFor from "p-wait-for";
 
 const logger = log.getLogger("OnDemandPlugin/StartupPolicyService");
 
@@ -27,48 +30,254 @@ interface StartupPolicyDeps {
 }
 
 /**
+ * Manage interception of the ViewRegistry
+ */
+class ViewRegistryInterceptor {
+    private originalRegisterView: ((type: string, creator: unknown) => unknown) | null = null;
+
+    constructor(
+        private app: App,
+        private getPluginMode: (pluginId: string) => PluginMode,
+    ) {}
+
+    /**
+     * Intercept ViewRegistry.registerView to record view registrations
+     * for lazyOnView plugins
+     */
+    intercept(lazyOnViews: Record<string, string[]>): () => void {
+        const { viewRegistry } = this.app as unknown as {
+            viewRegistry?: {
+                registerView?: (type: string, creator: unknown) => unknown;
+            };
+        };
+
+        this.originalRegisterView = viewRegistry?.registerView ?? null;
+        if (!viewRegistry || typeof this.originalRegisterView !== "function") {
+            return () => {};
+        }
+
+        viewRegistry.registerView = (type: string, creator: unknown) => {
+            const loadingPluginId = (
+                this.app as unknown as { plugins: Plugins }
+            ).plugins.loadingPluginId as string | undefined;
+
+            if (
+                loadingPluginId &&
+                this.getPluginMode(loadingPluginId) === "lazyOnView" &&
+                typeof type === "string" &&
+                type.length > 0
+            ) {
+                if (!lazyOnViews[loadingPluginId]) {
+                    lazyOnViews[loadingPluginId] = [];
+                }
+                if (!lazyOnViews[loadingPluginId].includes(type)) {
+                    lazyOnViews[loadingPluginId].push(type);
+                }
+            }
+
+            return this.originalRegisterView!.apply(viewRegistry, [type, creator]);
+        };
+
+        return () => this.restore(viewRegistry);
+    }
+
+    private restore(viewRegistry: { registerView?: (type: string, creator: unknown) => unknown }) {
+        if (viewRegistry && this.originalRegisterView) {
+            viewRegistry.registerView = this.originalRegisterView;
+        }
+    }
+}
+
+/**
+ * Helper to wait for plugin load completion
+ */
+class PluginLoadWaiter {
+    constructor(private plugins: PluginsMap | undefined) {}
+
+    /**
+     * Wait until all specified plugins have finished loading
+     */
+    async waitForAll(pluginIds: string[], timeoutMs: number): Promise<boolean> {
+        if (!pluginIds.length) return true;
+
+        try {
+            await pWaitFor(
+                () => pluginIds.every((id) => isPluginLoaded(this.plugins, id)),
+                { interval: 100, timeout: timeoutMs },
+            );
+            return true;
+        } catch (error) {
+            // timeout
+            return false;
+        }
+    }
+
+    /**
+     * Cancellable wait
+     */
+    async waitForAllCancellable(
+        pluginIds: string[],
+        timeoutMs: number,
+        isCancelled: () => boolean,
+    ): Promise<boolean> {
+        if (!pluginIds.length) return true;
+
+        const checkInterval = 100;
+        const startedAt = Date.now();
+
+        while (true) {
+            if (isCancelled()) return false;
+
+            if (pluginIds.every((id) => isPluginLoaded(this.plugins, id))) {
+                return true;
+            }
+
+            if (Date.now() - startedAt >= timeoutMs) {
+                return false;
+            }
+
+            await new Promise((resolve) => setTimeout(resolve, checkInterval));
+        }
+    }
+}
+
+/**
+ * Helper to centralize persistence operations
+ */
+class PersistenceManager {
+    constructor(
+        private app: App,
+        private deps: {
+            savelazyOnViews: (next: Record<string, string[]>) => Promise<void>;
+            writeCommunityPluginsFile: (enabledPlugins: string[]) => Promise<void>;
+        },
+    ) {}
+
+    /**
+     * Persist lazyOnViews (remote + local)
+     */
+    async savelazyOnViews(lazyOnViews: Record<string, string[]>): Promise<void> {
+        await this.deps.savelazyOnViews(lazyOnViews);
+        // Also persist lazy-on-view registry locally per-vault
+        saveJSON(this.app, "lazyOnViews", lazyOnViews);
+    }
+
+    /**
+     * Write the community-plugins file
+     */
+    async writeCommunityPlugins(enabledPlugins: Set<string>): Promise<void> {
+        await this.deps.writeCommunityPluginsFile(
+            [...enabledPlugins].sort((a, b) => a.localeCompare(b)),
+        );
+    }
+}
+
+/**
+ * Plugin loader with progress indicator
+ */
+class PluginLoader {
+    constructor(
+        private deps: {
+            obsidianPlugins: {
+                enabledPlugins: Set<string>;
+                plugins?: PluginsMap;
+                enablePlugin: (id: string) => Promise<void | boolean>;
+            };
+            refreshCommandCache: (pluginIds?: string[]) => Promise<void>;
+        },
+    ) {}
+
+    /**
+     * Load plugins sequentially and update progress
+     */
+    async loadWithProgress(
+        manifests: PluginManifest[],
+        progress: ProgressDialog | null,
+        isCancelled: () => boolean,
+    ): Promise<void> {
+        for (let index = 0; index < manifests.length; index += 1) {
+            if (isCancelled()) break;
+
+            const plugin = manifests[index];
+            progress?.setStatus(`Loading ${plugin.name}`);
+            progress?.setProgress(index + 1);
+
+            const loaded = isPluginLoaded(
+                this.deps.obsidianPlugins.plugins,
+                plugin.id,
+            );
+            const enabled = isPluginEnabled(
+                this.deps.obsidianPlugins.enabledPlugins,
+                plugin.id,
+            );
+
+            if (!enabled || !loaded) {
+                try {
+                    await this.deps.obsidianPlugins.enablePlugin(plugin.id);
+                } catch (error) {
+                    logger.warn("Failed to load plugin", plugin.id, error);
+                }
+            }
+        }
+    }
+
+    /**
+     * Rebuild the command cache
+     */
+    async rebuildCommandCache(
+        pluginIds?: string[],
+        progress?: ProgressDialog | null,
+        progressValue?: number,
+    ): Promise<void> {
+        progress?.setStatus("Rebuilding command cache…");
+        await this.deps.refreshCommandCache(pluginIds);
+        if (progress && progressValue !== undefined) {
+            progress.setProgress(progressValue);
+        }
+    }
+}
+
+/**
  * Manages plugin startup policies and lifecycle.
  * Handles lazy loading, view-based loading, and persistent plugin states with progress UI and cancellation support.
  */
 export class StartupPolicyService {
-    private startupPolicyLock: Promise<void> | null = null;
-    private startupPolicyPending = false;
-    private startupPolicyDebounceTimer: number | null = null;
-    private startupPolicyDebounceMs = 100;
+    private mutex = new Mutex();
+    private viewRegistryInterceptor: ViewRegistryInterceptor;
+    private pluginLoadWaiter: PluginLoadWaiter;
+    private persistenceManager: PersistenceManager;
+    private pluginLoader: PluginLoader;
 
-    constructor(private deps: StartupPolicyDeps) {}
+    constructor(private deps: StartupPolicyDeps) {
+        this.viewRegistryInterceptor = new ViewRegistryInterceptor(
+            deps.app,
+            deps.getPluginMode,
+        );
+        this.pluginLoadWaiter = new PluginLoadWaiter(deps.obsidianPlugins.plugins);
+        this.persistenceManager = new PersistenceManager(deps.app, {
+            savelazyOnViews: deps.savelazyOnViews,
+            writeCommunityPluginsFile: deps.writeCommunityPluginsFile,
+        });
+        this.pluginLoader = new PluginLoader({
+            obsidianPlugins: deps.obsidianPlugins,
+            refreshCommandCache: deps.refreshCommandCache,
+        });
+    }
 
     /**
      * Apply plugin startup policy with progress indicator and reload support.
-     * @param pluginIds - Optional list of plugin IDs to apply policy to; if omitted, applies to all
+     * Serialized using debounce + mutex
      */
-    async apply(pluginIds?: string[]) {
-        if (this.startupPolicyLock) {
-            this.startupPolicyPending = true;
-            await this.startupPolicyLock;
-            if (this.startupPolicyPending) {
-                this.startupPolicyPending = false;
-                await this.apply(pluginIds);
-            }
-            return;
-        }
-
-        this.startupPolicyLock = this.executeStartupPolicy(pluginIds);
-        try {
-            await this.startupPolicyLock;
-        } finally {
-            this.startupPolicyLock = null;
-        }
-
-        if (this.startupPolicyPending) {
-            this.startupPolicyPending = false;
-            await this.apply();
-        }
-    }
+    public apply = pDebounce(
+        async (pluginIds?: string[]) => {
+            await this.mutex.runExclusive(async () => {
+                await this.executeStartupPolicy(pluginIds);
+            });
+        },
+        100,
+    );
 
     private async executeStartupPolicy(pluginIds?: string[]) {
-        await this.debounce();
-
         const manifests = this.deps.getManifests();
         const targetPluginIds = pluginIds?.length ? new Set(pluginIds) : null;
         const targetManifests = this.getTargetManifests(
@@ -85,7 +294,7 @@ export class StartupPolicyService {
         const lazyOnViews: Record<string, string[]> = {
             ...(this.deps.getlazyOnViews() ?? {}),
         };
-        const viewRegistryCleanup = this.interceptViewRegistration(lazyOnViews);
+        const viewRegistryCleanup = this.viewRegistryInterceptor.intercept(lazyOnViews);
 
         try {
             await this.loadLazyPluginsWithProgress(
@@ -102,19 +311,6 @@ export class StartupPolicyService {
                 progress,
             );
         }
-    }
-
-    private async debounce() {
-        if (this.startupPolicyDebounceTimer) {
-            window.clearTimeout(this.startupPolicyDebounceTimer);
-        }
-
-        await new Promise<void>((resolve) => {
-            this.startupPolicyDebounceTimer = window.setTimeout(() => {
-                this.startupPolicyDebounceTimer = null;
-                resolve();
-            }, this.startupPolicyDebounceMs);
-        });
     }
 
     private getTargetManifests(
@@ -148,92 +344,32 @@ export class StartupPolicyService {
         return progress;
     }
 
-    private interceptViewRegistration(lazyOnViews: Record<string, string[]>) {
-        const { viewRegistry } = this.deps.app as unknown as {
-            viewRegistry?: {
-                registerView?: (type: string, creator: unknown) => unknown;
-            };
-        };
-
-        const originalRegisterView = viewRegistry?.registerView;
-        if (!viewRegistry || typeof originalRegisterView !== "function") {
-            return () => {};
-        }
-
-        viewRegistry.registerView = (type: string, creator: unknown) => {
-            const loadingPluginId = (
-                this.deps.app as unknown as { plugins: Plugins }
-            ).plugins.loadingPluginId as string | undefined;
-
-            if (
-                loadingPluginId &&
-                this.deps.getPluginMode(loadingPluginId) === "lazyOnView" &&
-                typeof type === "string" &&
-                type.length > 0
-            ) {
-                if (!lazyOnViews[loadingPluginId]) {
-                    lazyOnViews[loadingPluginId] = [];
-                }
-                if (!lazyOnViews[loadingPluginId].includes(type)) {
-                    lazyOnViews[loadingPluginId].push(type);
-                }
-            }
-
-            return originalRegisterView.apply(viewRegistry, [type, creator]);
-        };
-
-        return () => {
-            if (viewRegistry && originalRegisterView) {
-                viewRegistry.registerView = originalRegisterView;
-            }
-        };
-    }
-
     private async loadLazyPluginsWithProgress(
         lazyManifests: PluginManifest[],
         targetPluginIds: Set<string> | null,
         progress: ProgressDialog | null,
         isCancelled: () => boolean,
     ) {
-        for (let index = 0; index < lazyManifests.length; index += 1) {
-            if (isCancelled()) break;
-
-            const plugin = lazyManifests[index];
-            progress?.setStatus(`Loading ${plugin.name}`);
-            progress?.setProgress(index + 1);
-
-            const loaded = isPluginLoaded(
-                this.deps.obsidianPlugins.plugins,
-                plugin.id,
-            );
-            const enabled = isPluginEnabled(
-                this.deps.obsidianPlugins.enabledPlugins,
-                plugin.id,
-            );
-
-            if (!enabled || !loaded) {
-                try {
-                    await this.deps.obsidianPlugins.enablePlugin(plugin.id);
-                } catch (error) {
-                    logger.warn("Failed to load plugin", plugin.id, error);
-                }
-            }
-        }
+        await this.pluginLoader.loadWithProgress(lazyManifests, progress, isCancelled);
 
         if (isCancelled()) return;
 
         progress?.setStatus("Waiting for plugins to finish registering…");
         const pluginIds = lazyManifests.map((plugin) => plugin.id);
-        await this.waitForAllPluginsLoaded(pluginIds, 1000 * 15);
+        await this.pluginLoadWaiter.waitForAllCancellable(
+            pluginIds,
+            15 * 1000,
+            isCancelled,
+        );
         progress?.setProgress(lazyManifests.length + 1);
 
         if (isCancelled()) return;
 
-        progress?.setStatus("Rebuilding command cache…");
-        await this.deps.refreshCommandCache(
+        await this.pluginLoader.rebuildCommandCache(
             targetPluginIds ? Array.from(targetPluginIds) : undefined,
+            progress,
+            lazyManifests.length + 2,
         );
-        progress?.setProgress(lazyManifests.length + 2);
     }
 
     private async cleanupAndReload(
@@ -244,15 +380,15 @@ export class StartupPolicyService {
     ) {
         viewRegistryCleanup();
 
+        // Remove entries that are not lazyOnView
         for (const plugin of this.deps.getManifests()) {
             if (this.deps.getPluginMode(plugin.id) !== "lazyOnView") {
                 delete lazyOnViews[plugin.id];
             }
         }
-        await this.deps.savelazyOnViews(lazyOnViews);
-        // Also persist lazy-on-view registry locally per-vault
-        saveJSON(this.deps.app, "lazyOnViews", lazyOnViews);
+        await this.persistenceManager.savelazyOnViews(lazyOnViews);
 
+        // Keep only plugins with `keepEnabled` in the enabled list
         const desiredEnabled = new Set<string>();
         this.deps.getManifests().forEach((plugin) => {
             if (this.deps.getPluginMode(plugin.id) === "keepEnabled") {
@@ -266,9 +402,7 @@ export class StartupPolicyService {
             this.deps.obsidianPlugins.enabledPlugins.add(pluginId);
         });
 
-        await this.deps.writeCommunityPluginsFile(
-            [...desiredEnabled].sort((a, b) => a.localeCompare(b)),
-        );
+        await this.persistenceManager.writeCommunityPlugins(desiredEnabled);
 
         if (shouldReload) {
             try {
@@ -281,36 +415,5 @@ export class StartupPolicyService {
         }
 
         progress?.close();
-    }
-
-    /**
-     * Wait for specified plugins to fully load with timeout.
-     * @param pluginIds - List of plugin IDs to wait for
-     * @param timeoutMs - Maximum time to wait in milliseconds
-     * @returns True if all plugins loaded within timeout, false otherwise
-     */
-    private async waitForAllPluginsLoaded(
-        pluginIds: string[],
-        timeoutMs: number,
-    ): Promise<boolean> {
-        if (!pluginIds.length) return true;
-
-        const startedAt = Date.now();
-
-        while (true) {
-            if (
-                pluginIds.every((pluginId) =>
-                    isPluginLoaded(this.deps.obsidianPlugins.plugins, pluginId),
-                )
-            ) {
-                return true;
-            }
-            if (Date.now() - startedAt >= timeoutMs) {
-                return false;
-            }
-
-            // Sleep for a short duration before checking again
-            await sleep(100);
-        }
     }
 }

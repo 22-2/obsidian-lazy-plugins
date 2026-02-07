@@ -11,9 +11,6 @@ importers:
       async-mutex:
         specifier: ^0.5.0
         version: 0.5.0
-      keyed-mutex:
-        specifier: ^0.1.4
-        version: 0.1.4
       loglevel:
         specifier: ^1.9.2
         version: 1.9.2
@@ -23,6 +20,18 @@ importers:
       obsidian-typings:
         specifier: ^4.93.0
         version: 4.93.0(@pixi/core@7.2.4)(@pixi/display@7.2.4(@pixi/core@7.2.4))(@pixi/utils@7.2.4)(typescript@5.9.3)
+      p-debounce:
+        specifier: ^5.1.0
+        version: 5.1.0
+      p-event:
+        specifier: ^7.1.0
+        version: 7.1.0
+      p-timeout:
+        specifier: ^7.0.1
+        version: 7.0.1
+      p-wait-for:
+        specifier: ^6.0.0
+        version: 6.0.0
       store2:
         specifier: ^2.14.4
         version: 2.14.4
@@ -771,9 +780,6 @@ packages:
   async-mutex@0.5.0:
     resolution: {integrity: sha512-1A94B18jkJ3DYq284ohPxoXbfTA5HsQ7/Mf4DEhcyLx3Bz27Rh59iScbB6EPiP+B+joue6YCxcMXSbFC1tZKwA==}
 
-  async-shared-mutex@2.2.2:
-    resolution: {integrity: sha512-6wiquk7mrEa+cHHN/clSJOPzHY28XUBqY4fK5JIdo292kMD9+wOhpx7DRm2Wjy7NtlkORHKjeM7ac+ZT5r0A/Q==}
-
   boolean@3.2.0:
     resolution: {integrity: sha512-d0II/GO9uf9lfUHH2BQsjxzRJZBdsjgsBiW4BvhWk/3qoKwQFjIDVN19PfX8F2D/r9PCMTtLWjYVCFrpeYUzsw==}
     deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
@@ -1240,9 +1246,6 @@ packages:
     resolution: {integrity: sha512-YHzO7721WbmAL6Ov1uzN/l5mY5WWWhJBSW+jq4tkfZfsxmo1hu6frS0EOswvjBUnWE6NtjEs48SFn5CQESRLZg==}
     hasBin: true
 
-  keyed-mutex@0.1.4:
-    resolution: {integrity: sha512-e8pNHwf6LUZt/gLdK8rYhsAbrLnatKlQG3ckUzgfJtoSXdluKfP/ink5Ub0HmD9T7xhMrDJmssH1iQ1tiC4rmQ==}
-
   keyv@4.5.4:
     resolution: {integrity: sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw==}
 
@@ -1377,6 +1380,14 @@ packages:
     resolution: {integrity: sha512-BZOr3nRQHOntUjTrH8+Lh54smKHoHyur8We1V8DSMVrl5A2malOOwuJRnKRDjSnkoeBh4at6BwEnb5I7Jl31wg==}
     engines: {node: '>=8'}
 
+  p-debounce@5.1.0:
+    resolution: {integrity: sha512-3DNQmB7HPRMSuZ9P8JQFzEr7156s1S5Lqpi3mSrsZe5AHvl4ONfGrdB5azWqeOpNejQiemgQBkyU+IDKR5nwyg==}
+    engines: {node: '>=20'}
+
+  p-event@7.1.0:
+    resolution: {integrity: sha512-/lkPs5W1aC3cp6vqZefpdosOn65J571sWodyfOQiF0+tmDCpU+H8Atwpu0vQROCVUlZuToDN5eyTLsMLLc54mg==}
+    engines: {node: '>=20'}
+
   p-limit@4.0.0:
     resolution: {integrity: sha512-5b0R4txpzjPWVw/cXXUResoD4hb6U/x9BH08L7nw+GN1sezDzPdxeRvpc9c433fZhBan/wusjbCsqwqm4EIBIQ==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
@@ -1384,6 +1395,14 @@ packages:
   p-locate@6.0.0:
     resolution: {integrity: sha512-wPrq66Llhl7/4AGC6I+cqxT07LhXvWL08LNXz1fENOw0Ap4sRZZ/gZpTTJ5jpurzzzfS2W/Ge9BY3LgLjCShcw==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
+
+  p-timeout@7.0.1:
+    resolution: {integrity: sha512-AxTM2wDGORHGEkPCt8yqxOTMgpfbEHqF51f/5fJCmwFC3C/zNcGT63SymH2ttOAaiIws2zVg4+izQCjrakcwHg==}
+    engines: {node: '>=20'}
+
+  p-wait-for@6.0.0:
+    resolution: {integrity: sha512-2kKzMtjS8TVcpCOU/gr3vZ4K/WIyS1AsEFXFWapM/0lERCdyTbB6ZeuCIp+cL1aeLZfQoMdZFCBTHiK4I9UtOw==}
+    engines: {node: '>=20'}
 
   package-json-from-dist@1.0.1:
     resolution: {integrity: sha512-UEZIS3/by4OC8vL3P2dTXRETpebLI2NiI5vIrjaD/5UtrkFX/tNbwjTSRAGC/+7CAo2pIcBaRgWmcBBHcsaCIw==}
@@ -2317,8 +2336,6 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  async-shared-mutex@2.2.2: {}
-
   boolean@3.2.0:
     optional: true
 
@@ -2857,10 +2874,6 @@ snapshots:
     dependencies:
       commander: 8.3.0
 
-  keyed-mutex@0.1.4:
-    dependencies:
-      async-shared-mutex: 2.2.2
-
   keyv@4.5.4:
     dependencies:
       json-buffer: 3.0.1
@@ -3043,6 +3056,12 @@ snapshots:
 
   p-cancelable@2.1.1: {}
 
+  p-debounce@5.1.0: {}
+
+  p-event@7.1.0:
+    dependencies:
+      p-timeout: 7.0.1
+
   p-limit@4.0.0:
     dependencies:
       yocto-queue: 1.2.2
@@ -3050,6 +3069,10 @@ snapshots:
   p-locate@6.0.0:
     dependencies:
       p-limit: 4.0.0
+
+  p-timeout@7.0.1: {}
+
+  p-wait-for@6.0.0: {}
 
   package-json-from-dist@1.0.1: {}
 

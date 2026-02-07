@@ -1,9 +1,14 @@
-import { App, Editor, MarkdownView, Command } from "obsidian";
+import { App, Editor, MarkdownView } from "obsidian";
 import log from "loglevel";
+import { Mutex } from "async-mutex";
+import pWaitFor from "p-wait-for";
+import { pEvent } from "p-event";
+import pTimeout from "p-timeout";
 import { LazySettings } from "../settings";
 import { CachedCommand } from "./command-cache-service";
 import { ViewRegistry } from "obsidian-typings";
 import { isPluginLoaded, isPluginEnabled, PluginsMap } from "../utils/utils";
+
 const logger = log.getLogger("OnDemandPlugin/LazyCommandRunner");
 
 interface LazyCommandRunnerDeps {
@@ -22,12 +27,22 @@ interface LazyCommandRunnerDeps {
 }
 
 export class LazyCommandRunner {
-    private inFlightPlugins = new Set<string>();
+    // pluginId ごとのロックを管理
+    private pluginMutexes = new Map<string, Mutex>();
 
     constructor(private deps: LazyCommandRunnerDeps) {}
 
     clear() {
-        this.inFlightPlugins.clear();
+        this.pluginMutexes.clear();
+    }
+
+    private getPluginMutex(pluginId: string): Mutex {
+        let mutex = this.pluginMutexes.get(pluginId);
+        if (!mutex) {
+            mutex = new Mutex();
+            this.pluginMutexes.set(pluginId, mutex);
+        }
+        return mutex;
     }
 
     async runLazyCommand(commandId: string) {
@@ -62,35 +77,38 @@ export class LazyCommandRunner {
     }
 
     async ensurePluginLoaded(pluginId: string): Promise<boolean> {
-        if (this.inFlightPlugins.has(pluginId)) {
-            return await this.waitForPluginLoaded(pluginId);
-        }
-        this.inFlightPlugins.add(pluginId);
+        const mutex = this.getPluginMutex(pluginId);
 
-        try {
-            const loaded = isPluginLoaded(
-                this.deps.obsidianPlugins.plugins,
-                pluginId,
-            );
-            const enabled = isPluginEnabled(
-                this.deps.obsidianPlugins.enabledPlugins,
-                pluginId,
-            );
-            if (!enabled || !loaded) {
+        return await mutex.runExclusive(async () => {
+            try {
+                const loaded = isPluginLoaded(
+                    this.deps.obsidianPlugins.plugins,
+                    pluginId,
+                );
+                const enabled = isPluginEnabled(
+                    this.deps.obsidianPlugins.enabledPlugins,
+                    pluginId,
+                );
+
+                if (enabled && loaded) {
+                    this.deps.syncCommandWrappersForPlugin?.(pluginId);
+                    return true;
+                }
+
                 await this.deps.obsidianPlugins.enablePlugin(pluginId);
-                const loaded = await this.waitForPluginLoaded(pluginId);
-                if (!loaded) return false;
+                const loadSuccess = await this.waitForPluginLoaded(pluginId);
+                
+                if (!loadSuccess) return false;
+
+                this.deps.syncCommandWrappersForPlugin?.(pluginId);
+                return true;
+            } catch (error) {
+                if (this.deps.getData().showConsoleLog) {
+                    logger.error(`Error loading plugin ${pluginId}:`, error);
+                }
+                return false;
             }
-            this.deps.syncCommandWrappersForPlugin?.(pluginId);
-            return true;
-        } catch (error) {
-            if (this.deps.getData().showConsoleLog) {
-                logger.error(`Error loading plugin ${pluginId}:`, error);
-            }
-            return false;
-        } finally {
-            this.inFlightPlugins.delete(pluginId);
-        }
+        });
     }
 
     async waitForCommand(
@@ -99,67 +117,77 @@ export class LazyCommandRunner {
     ): Promise<boolean> {
         if (this.isCommandExecutable(commandId)) return true;
 
-        return await new Promise<boolean>((resolve) => {
-            const viewRegistry = (
-                this.deps.app as unknown as { viewRegistry?: ViewRegistry }
-            ).viewRegistry;
-            let done = false;
-
-            const cleanup = () => {
-                if (done) return;
-                done = true;
-                if (viewRegistry?.off)
-                    viewRegistry.off("view-registered", onEvent);
-                if (this.deps.app.workspace?.off)
-                    this.deps.app.workspace.off("layout-change", onEvent);
-                if (timeoutId) window.clearTimeout(timeoutId);
-            };
-
-            const onEvent = () => {
-                if (this.isCommandExecutable(commandId)) {
-                    cleanup();
-                    resolve(true);
+        try {
+            await pTimeout(
+                this.createCommandReadyPromise(commandId),
+                {
+                    milliseconds: timeoutMs,
                 }
-            };
+            );
+            return true;
+        } catch (error) {
+            // タイムアウトまたはその他のエラー
+            return false;
+        }
+    }
 
-            if (viewRegistry?.on) viewRegistry.on("view-registered", onEvent);
-            if (this.deps.app.workspace?.on)
-                this.deps.app.workspace.on("layout-change", onEvent);
+    private async createCommandReadyPromise(commandId: string): Promise<void> {
+        const viewRegistry = (
+            this.deps.app as unknown as { viewRegistry?: ViewRegistry }
+        ).viewRegistry;
 
-            queueMicrotask(onEvent);
+        // 即座にチェック
+        if (this.isCommandExecutable(commandId)) return;
 
-            const timeoutId = window.setTimeout(() => {
-                cleanup();
-                resolve(false);
-            }, timeoutMs);
-        });
+        const promises: Promise<void>[] = [];
+
+        // viewRegistry の "view-registered" イベント待ち
+        if (viewRegistry) {
+            promises.push(
+                pEvent(viewRegistry, "view-registered", {
+                    filter: () => this.isCommandExecutable(commandId),
+                    rejectionEvents: [],
+                }) as Promise<void>
+            );
+        }
+
+        // workspace の "layout-change" イベント待ち
+        if (this.deps.app.workspace) {
+            promises.push(
+                pEvent(this.deps.app.workspace, "layout-change", {
+                    filter: () => this.isCommandExecutable(commandId),
+                    rejectionEvents: [],
+                }) as Promise<void>
+            );
+        }
+
+        // いずれかのイベントで条件が満たされたら解決
+        if (promises.length > 0) {
+            await Promise.race(promises);
+        }
     }
 
     async waitForPluginLoaded(
         pluginId: string,
         timeoutMs = 8000,
     ): Promise<boolean> {
-        const startedAt = Date.now();
-        let timeoutId: number | null = null;
-
-        return await new Promise<boolean>((resolve) => {
-            const check = () => {
-                if (
-                    isPluginLoaded(this.deps.obsidianPlugins.plugins, pluginId)
-                ) {
-                    if (timeoutId) window.clearTimeout(timeoutId);
-                    resolve(true);
-                    return;
+        try {
+            await pTimeout(
+                pWaitFor(
+                    () => isPluginLoaded(this.deps.obsidianPlugins.plugins, pluginId),
+                    {
+                        interval: 100,
+                    }
+                ),
+                {
+                    milliseconds: timeoutMs,
                 }
-                if (Date.now() - startedAt >= timeoutMs) {
-                    resolve(false);
-                    return;
-                }
-                timeoutId = window.setTimeout(check, 100);
-            };
-
-            check();
-        });
+            );
+            return true;
+        } catch (error) {
+            // タイムアウト
+            return false;
+        }
     }
 
     /**
