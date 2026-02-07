@@ -231,8 +231,8 @@ export class StartupPolicyService {
 
     constructor(
         private ctx: PluginContext,
-        private commandCacheService: CommandCacheService,
-        private registry: PluginRegistry,
+        commandCacheService: CommandCacheService,
+        registry: PluginRegistry,
     ) {
         this.viewRegistryInterceptor = new ViewRegistryInterceptor(
             ctx.app,
@@ -385,7 +385,7 @@ export class StartupPolicyService {
 
         if (shouldReload) {
             try {
-                await (
+                (
                     this.ctx.app as unknown as { commands: Commands }
                 ).commands.executeCommandById("app:reload");
             } catch (error) {
