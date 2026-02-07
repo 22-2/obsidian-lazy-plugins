@@ -1,17 +1,9 @@
-import { App, EventRef, WorkspaceLeaf, debounce } from "obsidian";
-import { PluginMode } from "../settings";
-import { isLeafVisible, rebuildLeafView, isPluginLoaded, PluginsMap } from "../utils/utils";
-import { LockStrategy, LeafViewLockStrategy } from "./utils/leaf-lock";
+import { WorkspaceLeaf, debounce } from "obsidian";
+import { PluginContext } from "../../core/plugin-context";
+import { CommandRegistry, PluginLoader } from "../../core/interfaces";
+import { isLeafVisible, rebuildLeafView, isPluginLoaded, PluginsMap } from "../../utils/utils";
+import { LockStrategy, LeafViewLockStrategy } from "./leaf-lock";
 import log from "loglevel";
-
-interface ViewLazyLoaderDeps {
-    app: App;
-    registerEvent: (eventRef: EventRef) => void;
-    getPluginMode: (pluginId: string) => PluginMode;
-    getLazyOnViews: () => Record<string, string[]> | undefined;
-    ensurePluginLoaded: (pluginId: string) => Promise<boolean>;
-    syncCommandWrappersForPlugin: (pluginId: string) => void;
-}
 
 const logger = log.getLogger("OnDemandPlugin/ViewLazyLoader");
 
@@ -25,18 +17,20 @@ export class ViewLazyLoader {
     );
 
     constructor(
-        private deps: ViewLazyLoaderDeps,
+        private ctx: PluginContext,
+        private pluginLoader: PluginLoader & { ensurePluginLoaded(pluginId: string): Promise<boolean> },
+        private commandRegistry: CommandRegistry,
         private lockStrategy: LockStrategy<{ leaf: WorkspaceLeaf; viewType: string }> = new LeafViewLockStrategy(),
     ) {}
 
     registerActiveLeafReload(): void {
-        this.deps.registerEvent(
-            this.deps.app.workspace.on("active-leaf-change", this.debouncedInitializeLazyViewForLeaf),
+        this.ctx.registerEvent(
+            this.ctx.app.workspace.on("active-leaf-change", this.debouncedInitializeLazyViewForLeaf),
         );
 
         // Initial load
-        this.deps.app.workspace.onLayoutReady(() =>
-            this.deps.app.workspace.iterateAllLeaves((leaf) => {
+        this.ctx.app.workspace.onLayoutReady(() =>
+            this.ctx.app.workspace.iterateAllLeaves((leaf) => {
                 void this.initializeLazyViewForLeaf(leaf);
             }),
         );
@@ -44,13 +38,13 @@ export class ViewLazyLoader {
 
     async initializeLazyViewForLeaf(leaf: WorkspaceLeaf): Promise<void> {
         // Avoid loading lazy-on-view plugins during layout restoration.
-        if (!this.deps.app.workspace.layoutReady) return;
+        if (!this.ctx.app.workspace.layoutReady) return;
         if (!leaf) return;
         const viewType = leaf.view.getViewType();
 
         const release = await this.lockStrategy.lock({ leaf, viewType });
         try {
-            if (!this.deps.app.workspace.layoutReady) return;
+            if (!this.ctx.app.workspace.layoutReady) return;
             if (!isLeafVisible(leaf)) return;
 
             const last = this.lastProcessed.get(leaf);
@@ -60,13 +54,13 @@ export class ViewLazyLoader {
             const pluginId = this.getPluginIdForViewType(viewType);
             if (!pluginId) return;
 
-            if (this.deps.getPluginMode(pluginId) !== "lazyOnView") return;
+            if (this.ctx.getPluginMode(pluginId) !== "lazyOnView") return;
 
             // If the plugin was already loaded, there's no need to rebuild the view
-            const plugins = (this.deps.app as unknown as { plugins?: PluginsMap }).plugins;
+            const plugins = (this.ctx.app as unknown as { plugins?: PluginsMap }).plugins;
             const wasLoaded = isPluginLoaded(plugins, pluginId);
 
-            const loaded = await this.deps.ensurePluginLoaded(pluginId);
+            const loaded = await this.pluginLoader.ensurePluginLoaded(pluginId);
             if (!loaded) return;
 
             // Only reconstruct the view if the plugin was not already loaded before this call.
@@ -80,7 +74,7 @@ export class ViewLazyLoader {
                 }
             }
 
-            this.deps.syncCommandWrappersForPlugin(pluginId);
+            this.commandRegistry.syncCommandWrappersForPlugin(pluginId);
             // record that we processed this leaf+viewType
             this.lastProcessed.set(leaf, { viewType, at: Date.now() });
         } finally {
@@ -90,21 +84,21 @@ export class ViewLazyLoader {
 
     async checkViewTypeForLazyLoading(viewType: string): Promise<void> {
         if (!viewType) return;
-        if (!this.deps.app.workspace.layoutReady) return;
+        if (!this.ctx.app.workspace.layoutReady) return;
 
-        const lazyOnViews = this.deps.getLazyOnViews() || {};
+        const lazyOnViews = this.ctx.getSettings().lazyOnViews || {};
         for (const [pluginId, viewTypes] of Object.entries(lazyOnViews)) {
             if (viewTypes.includes(viewType)) {
-                const mode = this.deps.getPluginMode(pluginId);
+                const mode = this.ctx.getPluginMode(pluginId);
                 if (mode === "lazyOnView") {
-                    await this.deps.ensurePluginLoaded(pluginId);
+                    await this.pluginLoader.ensurePluginLoaded(pluginId);
                 }
             }
         }
     }
 
     private getPluginIdForViewType(viewType: string): string | null {
-        const lazyOnViews = this.deps.getLazyOnViews() || {};
+        const lazyOnViews = this.ctx.getSettings().lazyOnViews || {};
         for (const [pluginId, viewTypes] of Object.entries(lazyOnViews)) {
             if (viewTypes.includes(viewType)) {
                 return pluginId;

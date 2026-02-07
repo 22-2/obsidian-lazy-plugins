@@ -1,12 +1,12 @@
 import { Platform, Plugin } from "obsidian";
-import { loadJSON } from "./storage";
+import { loadJSON } from "../../core/storage";
 import {
     DEFAULT_DEVICE_SETTINGS,
     DEFAULT_SETTINGS,
     DeviceSettings,
     LazySettings,
     PluginMode,
-} from "../settings";
+} from "../../core/types";
 
 export class SettingsService {
     data: LazySettings;

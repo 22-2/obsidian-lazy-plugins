@@ -1,12 +1,7 @@
 import log from "loglevel";
 import { App, TFile, WorkspaceLeaf, EventRef } from "obsidian";
-
-interface ExcalidrawWrapperDeps {
-    app: App;
-    registerEvent: (ref: EventRef) => void;
-    getPluginMode: (pluginId: string) => string;
-    ensurePluginLoaded: (pluginId: string) => Promise<boolean>;
-}
+import { PluginContext } from "../core/plugin-context";
+import { PluginLoader } from "../core/interfaces";
 
 const logger = log.getLogger("ExcalidrawWrapper");
 
@@ -24,18 +19,21 @@ function isExcalidrawFile(app: App, file: TFile | null | undefined): boolean {
     }
 }
 
-export function registerExcalidrawWrapper(deps: ExcalidrawWrapperDeps) {
-    const { app, registerEvent, getPluginMode, ensurePluginLoaded } = deps;
+export function registerExcalidrawWrapper(
+    ctx: PluginContext,
+    pluginLoader: PluginLoader & { ensurePluginLoaded(pluginId: string): Promise<boolean> },
+) {
+    const { app } = ctx;
 
     // Handle file-open: when a file that is an Excalidraw drawing is opened, ensure plugin is loaded first
-    registerEvent(
+    ctx.registerEvent(
         app.workspace.on("file-open", async (file: TFile | null) => {
             if (!file) return;
             if (!isExcalidrawFile(app, file)) return;
-            const mode = getPluginMode(EXCALIDRAW_PLUGIN_ID);
+            const mode = ctx.getPluginMode(EXCALIDRAW_PLUGIN_ID);
             if (mode !== "lazyOnView") return;
 
-            await ensurePluginLoaded(EXCALIDRAW_PLUGIN_ID);
+            await pluginLoader.ensurePluginLoaded(EXCALIDRAW_PLUGIN_ID);
             // After plugin loaded, attempt to open the file in the proper view (plugin will register view types)
             try {
                 const leaf = app.workspace.getLeaf(false) as WorkspaceLeaf;
@@ -50,7 +48,6 @@ export function registerExcalidrawWrapper(deps: ExcalidrawWrapperDeps) {
     );
 
     // Handle layout restore: iterate leaves and load plugin for any excalidraw files that are present
-    // app.workspace.onLayoutReady may not return an EventRef in some typings, so don't pass it to registerEvent
     app.workspace.onLayoutReady(() => {
         if (!app.workspace.layoutReady) return;
         app.workspace.iterateAllLeaves((leaf: WorkspaceLeaf) => {
@@ -61,10 +58,10 @@ export function registerExcalidrawWrapper(deps: ExcalidrawWrapperDeps) {
                 const f = app.vault.getAbstractFileByPath(path) as TFile | null;
                 if (!f) return;
                 if (!isExcalidrawFile(app, f)) return;
-                const mode = getPluginMode(EXCALIDRAW_PLUGIN_ID);
+                const mode = ctx.getPluginMode(EXCALIDRAW_PLUGIN_ID);
                 if (mode !== "lazyOnView") return;
                 // ensure plugin loaded, then try to re-open file in this leaf
-                void ensurePluginLoaded(EXCALIDRAW_PLUGIN_ID).then(async (loaded) => {
+                void pluginLoader.ensurePluginLoaded(EXCALIDRAW_PLUGIN_ID).then(async (loaded) => {
                     if (!loaded) return;
                     try {
                         await leaf.openFile(f);

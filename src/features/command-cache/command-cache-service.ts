@@ -1,43 +1,12 @@
-import { PluginManifest, App } from "obsidian";
-import { loadJSON, saveJSON } from "./storage";
-import { CommandCache, LazySettings, PluginMode } from "../settings";
-import { isPluginLoaded, PluginsMap } from "../utils/utils";
+import { PluginManifest } from "obsidian";
+import { loadJSON, saveJSON } from "../../core/storage";
+import { CommandCache, LazySettings, PluginMode } from "../../core/types";
+import { PluginContext } from "../../core/plugin-context";
+import { CachedCommand, PluginLoader } from "../../core/interfaces";
+import { isPluginLoaded } from "../../utils/utils";
 
-export interface CachedCommand {
-    id: string;
-    name: string;
-    icon?: string;
-    pluginId: string;
-}
-
-interface CommandCacheDeps {
-    obsidianCommands: {
-        commands: Record<string, unknown>;
-        addCommand: (command: {
-            id: string;
-            name: string;
-            icon?: string;
-            callback: () => Promise<void>;
-        }) => void;
-    };
-    obsidianPlugins: {
-        enabledPlugins: Set<string>;
-        plugins?: PluginsMap;
-        enablePlugin: (id: string) => Promise<void>;
-        disablePlugin: (id: string) => Promise<void>;
-    };
-    getManifests: () => PluginManifest[];
-    getPluginMode: (pluginId: string) => PluginMode;
-    getCommandPluginId: (commandId: string) => string | null;
-    waitForPluginLoaded: (
-        pluginId: string,
-        timeoutMs?: number,
-    ) => Promise<boolean>;
-    runLazyCommand: (commandId: string) => Promise<void>;
-    getData: () => LazySettings;
-    saveSettings: () => Promise<void>;
-    app: App;
-}
+// Re-export for consumers
+export type { CachedCommand } from "../../core/interfaces";
 
 export class CommandCacheService {
     private commandCache = new Map<string, CachedCommand>();
@@ -46,22 +15,25 @@ export class CommandCacheService {
     /** Tracks the actual command objects we register as wrappers, to distinguish them from real plugin commands. */
     private wrapperCommands = new Map<string, unknown>();
 
-    constructor(private deps: CommandCacheDeps) {}
+    constructor(
+        private ctx: PluginContext,
+        private pluginLoader: PluginLoader,
+    ) {}
 
     getCachedCommand(commandId: string) {
         return this.commandCache.get(commandId);
     }
 
     loadFromData() {
-        const data = this.deps.getData();
+        const data = this.ctx.getData();
         // Prefer persisted settings data, but fall back to local store2 cache
         let commandCacheSource = data.commandCache;
         if (!commandCacheSource) {
-            const stored = loadJSON<CommandCache>(this.deps.app, "commandCache");
+            const stored = loadJSON<CommandCache>(this.ctx.app, "commandCache");
             if (stored) {
                 commandCacheSource = stored;
                 // If we fell back to local cache, try to hydrate versions too
-                const storedVersions = loadJSON<Record<string, string>>(this.deps.app, "commandCacheVersions");
+                const storedVersions = loadJSON<Record<string, string>>(this.ctx.app, "commandCacheVersions");
                 if (storedVersions && !data.commandCacheVersions) {
                     data.commandCacheVersions = storedVersions;
                 }
@@ -134,13 +106,13 @@ export class CommandCacheService {
      * Return only manifests whose mode is `lazy` or `lazyOnView`.
      */
     private getLazyManifests() {
-        return this.deps
+        return this.ctx
             .getManifests()
             .filter((plugin) => this.isLazyMode(plugin.id));
     }
 
     private isLazyMode(pluginId: string) {
-        const mode = this.deps.getPluginMode(pluginId);
+        const mode = this.ctx.getPluginMode(pluginId);
         return mode === "lazy" || mode === "lazyOnView";
     }
 
@@ -160,22 +132,22 @@ export class CommandCacheService {
 
     async getCommandsForPlugin(pluginId: string): Promise<CachedCommand[]> {
         const wasEnabled =
-            this.deps.obsidianPlugins.enabledPlugins.has(pluginId);
+            this.ctx.obsidianPlugins.enabledPlugins.has(pluginId);
         if (!wasEnabled) {
-            await this.deps.obsidianPlugins.enablePlugin(pluginId);
+            await this.ctx.obsidianPlugins.enablePlugin(pluginId);
         }
 
-        if (!isPluginLoaded(this.deps.obsidianPlugins.plugins, pluginId)) {
-            await this.deps.waitForPluginLoaded(pluginId);
+        if (!isPluginLoaded(this.ctx.obsidianPlugins.plugins, pluginId)) {
+            await this.pluginLoader.waitForPluginLoaded(pluginId);
         }
 
         const commands = Object.values(
-            this.deps.obsidianCommands.commands,
+            this.ctx.obsidianCommands.commands,
         ) as CachedCommand[];
         const pluginCommands = commands
             .filter(
                 (command) =>
-                    this.deps.getCommandPluginId(command.id) === pluginId,
+                    this.ctx.getCommandPluginId(command.id) === pluginId,
             )
             .map((command) => ({
                 id: command.id,
@@ -200,8 +172,8 @@ export class CommandCacheService {
     }
 
     registerCachedCommands() {
-        for (const plugin of this.deps.getManifests()) {
-            const mode = this.deps.getPluginMode(plugin.id);
+        for (const plugin of this.ctx.getManifests()) {
+            const mode = this.ctx.getPluginMode(plugin.id);
             if (mode === "lazy" || mode === "lazyOnView") {
                 this.registerCachedCommandsForPlugin(plugin.id);
             }
@@ -213,7 +185,7 @@ export class CommandCacheService {
         if (!commandIds) return;
 
         commandIds.forEach((commandId) => {
-            const existing = this.deps.obsidianCommands.commands[commandId];
+            const existing = this.ctx.obsidianCommands.commands[commandId];
             const wrapper = this.wrapperCommands.get(commandId);
 
             if (existing && wrapper && existing !== wrapper) {
@@ -233,11 +205,11 @@ export class CommandCacheService {
                 name: cached.name,
                 icon: cached.icon,
                 callback: async () => {
-                    await this.deps.runLazyCommand(commandId);
+                    await this.pluginLoader.runLazyCommand(commandId);
                 },
             };
 
-            this.deps.obsidianCommands.addCommand(cmd);
+            this.ctx.obsidianCommands.addCommand(cmd);
             this.registeredWrappers.add(commandId);
             this.wrapperCommands.set(commandId, cmd);
         });
@@ -251,7 +223,7 @@ export class CommandCacheService {
     }
 
     removeCommandWrapper(commandId: string) {
-        const commands = this.deps.obsidianCommands as unknown as {
+        const commands = this.ctx.obsidianCommands as unknown as {
             removeCommand?: (id: string) => void;
             commands?: Record<string, unknown>;
         };
@@ -278,7 +250,7 @@ export class CommandCacheService {
     isWrapperCommand(commandId: string): boolean {
         const wrapper = this.wrapperCommands.get(commandId);
         if (!wrapper) return false;
-        const existing = this.deps.obsidianCommands.commands[commandId];
+        const existing = this.ctx.obsidianCommands.commands[commandId];
         return existing === wrapper;
     }
 
@@ -292,7 +264,7 @@ export class CommandCacheService {
 
         let shouldRegister = false;
         commandIds.forEach((commandId) => {
-            const existing = this.deps.obsidianCommands.commands[commandId];
+            const existing = this.ctx.obsidianCommands.commands[commandId];
             const wrapper = this.wrapperCommands.get(commandId);
 
             if (existing && wrapper && existing !== wrapper) {
@@ -313,16 +285,16 @@ export class CommandCacheService {
 
     isCommandCacheValid(pluginId: string): boolean {
         if (!this.pluginCommandIndex.has(pluginId)) return false;
-        const cached = this.deps.getData().commandCache?.[pluginId];
+        const cached = this.ctx.getData().commandCache?.[pluginId];
         if (!Array.isArray(cached) || cached.length === 0) return false;
 
-        const manifest = this.deps
+        const manifest = this.ctx
             .getManifests()
             .find((plugin) => plugin.id === pluginId);
         if (!manifest) return false;
 
         const cachedVersion =
-            this.deps.getData().commandCacheVersions?.[pluginId];
+            this.ctx.getData().commandCacheVersions?.[pluginId];
         if (!cachedVersion) return false;
 
         return cachedVersion === (manifest.version ?? "");
@@ -331,7 +303,7 @@ export class CommandCacheService {
     async persistCommandCache() {
         const cache: CommandCache = {};
         const versions: Record<string, string> = {};
-        this.deps.getManifests().forEach((plugin) => {
+        this.ctx.getManifests().forEach((plugin) => {
             const commands = Array.from(this.commandCache.values())
                 .filter((command) => command.pluginId === plugin.id)
                 .map((command) => ({
@@ -345,15 +317,15 @@ export class CommandCacheService {
             }
         });
 
-        const data = this.deps.getData();
+        const data = this.ctx.getData();
         data.commandCache = cache;
         data.commandCacheVersions = versions;
         data.commandCacheUpdatedAt = Date.now();
-        await this.deps.saveSettings();
+        await this.ctx.saveSettings();
 
         // Also persist local copies keyed by vault (appId) for faster/local retrieval
-        saveJSON(this.deps.app, "commandCache", cache);
-        saveJSON(this.deps.app, "commandCacheVersions", versions);
+        saveJSON(this.ctx.app, "commandCache", cache);
+        saveJSON(this.ctx.app, "commandCacheVersions", versions);
     }
 
     clear() {
