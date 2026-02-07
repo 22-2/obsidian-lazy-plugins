@@ -13,28 +13,28 @@ import { PluginsMap } from "../utils/utils";
 /**
  * Minimal view of Obsidian's `Commands` object used by services.
  */
-export interface ObsidianCommands {
-    commands: Record<string, unknown>;
-    addCommand: (command: {
-        id: string;
-        name: string;
-        icon?: string;
-        callback: () => Promise<void>;
-    }) => void;
-    removeCommand?: (id: string) => void;
-}
+// export interface ObsidianCommands {
+//     commands: Record<string, unknown>;
+//     addCommand: (command: {
+//         id: string;
+//         name: string;
+//         icon?: string;
+//         callback: () => Promise<void>;
+//     }) => void;
+//     removeCommand?: (id: string) => void;
+// }
 
 /**
  * Minimal view of Obsidian's `Plugins` object used by services.
  */
-export interface ObsidianPlugins {
-    manifests: Record<string, PluginManifest>;
-    enabledPlugins: Set<string>;
-    plugins?: PluginsMap;
-    enablePlugin: (id: string) => Promise<void>;
-    disablePlugin: (id: string) => Promise<void>;
-    loadingPluginId?: string;
-}
+// export interface ObsidianPlugins {
+//     manifests: Record<string, PluginManifest>;
+//     enabledPlugins: Set<string>;
+//     plugins?: PluginsMap;
+//     enablePlugin: (id: string) => Promise<void>;
+//     disablePlugin: (id: string) => Promise<void>;
+//     loadingPluginId?: string;
+// }
 
 /**
  * The shared context that every service can depend on.
@@ -44,8 +44,8 @@ export interface ObsidianPlugins {
  */
 export interface PluginContext {
     readonly app: App;
-    readonly obsidianPlugins: ObsidianPlugins;
-    readonly obsidianCommands: ObsidianCommands;
+    readonly obsidianPlugins: Plugins;
+    readonly obsidianCommands: Commands;
 
     /** Get all plugin manifests (excluding self and platform-filtered). */
     getManifests(): PluginManifest[];

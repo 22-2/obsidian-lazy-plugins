@@ -22,10 +22,10 @@ function createPluginContext(plugin: OnDemandPlugin): PluginContext & { _plugin:
         _plugin: plugin,
         get app() { return plugin.app; },
         get obsidianPlugins() {
-            return (plugin.app as unknown as { plugins: Plugins }).plugins as any;
+            return (plugin.app as unknown as { plugins: Plugins }).plugins;
         },
         get obsidianCommands() {
-            return (plugin.app as unknown as { commands: Commands }).commands as any;
+            return (plugin.app as unknown as { commands: Commands }).commands;
         },
         getManifests: () => plugin.manifests,
         getPluginMode: (pluginId) => plugin.getPluginMode(pluginId),
