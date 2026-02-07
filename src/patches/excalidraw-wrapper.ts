@@ -1,3 +1,4 @@
+import log from "loglevel";
 import { App, TFile, WorkspaceLeaf, EventRef } from "obsidian";
 
 interface ExcalidrawWrapperDeps {
@@ -6,6 +7,8 @@ interface ExcalidrawWrapperDeps {
     getPluginMode: (pluginId: string) => string;
     ensurePluginLoaded: (pluginId: string) => Promise<boolean>;
 }
+
+const logger = log.getLogger("ExcalidrawWrapper");
 
 const EXCALIDRAW_PLUGIN_ID = "obsidian-excalidraw-plugin";
 
@@ -41,7 +44,7 @@ export function registerExcalidrawWrapper(deps: ExcalidrawWrapperDeps) {
                     await leaf.openFile(file);
                 }
             } catch (e) {
-                // swallow errors; best-effort
+                logger.error("ExcalidrawWrapper: error opening Excalidraw file after plugin load", e);
             }
         }),
     );
@@ -66,11 +69,11 @@ export function registerExcalidrawWrapper(deps: ExcalidrawWrapperDeps) {
                     try {
                         await leaf.openFile(f);
                     } catch (e) {
-                        // ignore
+                        logger.error("ExcalidrawWrapper: error opening Excalidraw file during layout restore", e);
                     }
                 });
             } catch (e) {
-                // ignore per-leaf errors
+                logger.error("ExcalidrawWrapper: error during layout restore", e);
             }
         });
     });
