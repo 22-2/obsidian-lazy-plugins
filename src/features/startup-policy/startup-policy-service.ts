@@ -3,7 +3,7 @@ import { saveJSON } from "../../core/storage";
 import log from "loglevel";
 import { ProgressDialog } from "../../utils/progress";
 import { ON_DEMAND_PLUGIN_ID } from "../../utils/constants";
-import { isPluginLoaded, isPluginEnabled } from "../../utils/utils";
+import { isPluginLoaded, isPluginEnabled, isLazyMode } from "../../utils/utils";
 import { PluginMode } from "../../core/types";
 import { Commands, Plugins } from "obsidian-typings";
 import { Mutex } from "async-mutex";
@@ -324,9 +324,9 @@ export class StartupPolicyService {
 
     private getLazyManifests(manifests: PluginManifest[]) {
         return manifests.filter((plugin) => {
-            const mode = this.ctx.getPluginMode(plugin.id);
-            return mode === "lazy" || mode === "lazyOnView";
-        });
+                const mode = this.ctx.getPluginMode(plugin.id);
+                return isLazyMode(mode);
+            });
     }
 
     private createProgressDialog(

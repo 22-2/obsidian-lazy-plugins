@@ -3,7 +3,7 @@ import { CachedCommand, PluginLoader } from "../../core/interfaces";
 import { PluginContext } from "../../core/plugin-context";
 import { loadJSON, saveJSON } from "../../core/storage";
 import { CommandCache } from "../../core/types";
-import { isPluginLoaded } from "../../utils/utils";
+import { isPluginLoaded, isLazyMode } from "../../utils/utils";
 
 // Re-export for consumers
 export type { CachedCommand } from "../../core/interfaces";
@@ -104,7 +104,7 @@ export class CommandCacheService {
 
     private isLazyMode(pluginId: string) {
         const mode = this.ctx.getPluginMode(pluginId);
-        return mode === "lazy" || mode === "lazyOnView";
+        return isLazyMode(mode);
     }
 
     async refreshCommandsForPlugin(pluginId: string): Promise<boolean> {
@@ -164,8 +164,7 @@ export class CommandCacheService {
 
     registerCachedCommands() {
         for (const plugin of this.ctx.getManifests()) {
-            const mode = this.ctx.getPluginMode(plugin.id);
-            if (mode === "lazy" || mode === "lazyOnView") {
+            if (this.isLazyMode(plugin.id)) {
                 this.registerCachedCommandsForPlugin(plugin.id);
             }
         }

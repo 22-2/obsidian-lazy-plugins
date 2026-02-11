@@ -15,6 +15,7 @@ import {
     PluginSettings,
 } from "../../core/types";
 import { LazyOptionsModal } from "./lazy-options-modal";
+import { isLazyMode } from "../../utils/utils";
 
 const logger = log.getLogger("OnDemandPlugin/SettingsTab");
 
@@ -243,7 +244,7 @@ export class SettingsTab extends PluginSettingTab {
                 });
 
             // Only show for lazy modes
-            const isLazy = currentValue === "lazy" || currentValue === "lazyOnView";
+            const isLazy = isLazyMode(currentValue);
             gearBtn.extraSettingsEl.style.display = isLazy ? "inline-block" : "none";
             gearBtn.extraSettingsEl.addClass("lazy-plugin-gear-left");
 
@@ -281,7 +282,7 @@ export class SettingsTab extends PluginSettingTab {
         if (!this.plugin.settings.lazyOnViews) {
             this.plugin.settings.lazyOnViews = {};
         }
-        if (mode === "lazy" || mode === "lazyOnView") {
+        if (isLazyMode(mode)) {
             if (!this.plugin.settings.lazyOnViews[pluginId]) {
                 this.plugin.settings.lazyOnViews[pluginId] = [];
             }
@@ -301,7 +302,7 @@ export class SettingsTab extends PluginSettingTab {
         const lazyOnViews = this.plugin.settings.lazyOnViews;
         this.plugin.manifests.forEach((plugin) => {
             const mode = this.plugin.getPluginMode(plugin.id);
-            if (mode === "lazy" || mode === "lazyOnView") {
+            if (isLazyMode(mode)) {
                 if (!lazyOnViews[plugin.id]) {
                     lazyOnViews[plugin.id] = [];
                 }

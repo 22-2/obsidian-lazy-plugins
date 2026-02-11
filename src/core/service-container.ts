@@ -7,6 +7,7 @@
  */
 import { PluginManifest, WorkspaceLeaf } from "obsidian";
 import { ProgressDialog } from "../utils/progress";
+import { isLazyMode } from "../utils/utils";
 import { PluginContext } from "./plugin-context";
 import { CommandCacheService } from "../features/command-cache/command-cache-service";
 import { LazyCommandRunner } from "../features/lazy-runner/lazy-command-runner";
@@ -117,7 +118,7 @@ export class ServiceContainer {
         const manifests = this.ctx.getManifests();
         const lazyCount = manifests.filter((p) => {
             const mode = this.ctx.getPluginMode(p.id);
-            return mode === "lazy" || mode === "lazyOnView";
+            return isLazyMode(mode);
         }).length;
 
         const progress = new ProgressDialog(this.ctx.app, {
@@ -184,7 +185,7 @@ export class ServiceContainer {
             return;
         }
 
-        if (mode === "lazy" || mode === "lazyOnView") {
+        if (isLazyMode(mode)) {
             await this.commandCache.ensureCommandsCached(pluginId);
             if (this.ctx.obsidianPlugins.enabledPlugins.has(pluginId)) {
                 await this.ctx.obsidianPlugins.disablePlugin(pluginId);
