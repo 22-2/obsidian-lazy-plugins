@@ -1,4 +1,4 @@
-import { App, PluginManifest } from "obsidian";
+import { App, PluginManifest, debounce } from "obsidian";
 import { saveJSON } from "../../core/storage";
 import log from "loglevel";
 import { ProgressDialog } from "../../utils/progress";
@@ -7,7 +7,6 @@ import { isPluginLoaded, isPluginEnabled, isLazyMode } from "../../utils/utils";
 import { PluginMode } from "../../core/types";
 import { Commands, Plugins } from "obsidian-typings";
 import { Mutex } from "async-mutex";
-import pDebounce from "p-debounce";
 import pWaitFor from "p-wait-for";
 import { PluginContext } from "../../core/plugin-context";
 import { CommandCacheService } from "../command-cache/command-cache-service";
@@ -249,7 +248,7 @@ export class StartupPolicyService {
      * Apply plugin startup policy with progress indicator and reload support.
      * Serialized using debounce + mutex
      */
-    public apply = pDebounce(
+    public apply = debounce(
         async (pluginIds?: string[]) => {
             await this.mutex.runExclusive(async () => {
                 await this.executeStartupPolicy(pluginIds);
