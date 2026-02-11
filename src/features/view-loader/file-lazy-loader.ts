@@ -46,9 +46,6 @@ export class FileLazyLoader extends BaseLazyLoader<WorkspaceLeaf> {
             app.workspace.on("file-open", async (file: TFile | null) => {
                 if (!file) return;
 
-                // Allow a tiny bit of time for the workspace to update which leaf is showing the file
-                await new Promise((resolve) => setTimeout(resolve, 50));
-
                 app.workspace.iterateAllLeaves((leaf) => {
                     const viewFile = (leaf.view as ViewWithFile).file;
                     if (viewFile === file) {
