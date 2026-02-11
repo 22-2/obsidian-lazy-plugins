@@ -137,7 +137,7 @@ export class CommandCacheService {
             await this.ctx.obsidianPlugins.enablePlugin(pluginId);
         }
 
-        if (!isPluginLoaded(this.ctx.obsidianPlugins.plugins, pluginId)) {
+        if (!isPluginLoaded(this.ctx.app, pluginId)) {
             await this.pluginLoader.waitForPluginLoaded(pluginId);
         }
 

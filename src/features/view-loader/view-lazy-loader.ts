@@ -43,7 +43,7 @@ export class ViewLazyLoader {
         if (!leaf) return;
         
         const viewType = leaf.view.getViewType();
-        const leafId = (leaf as any).id || 'unknown';
+        const leafId = leaf.id || 'unknown';
         
         logger.debug(`[LazyPlugins] initializeLazyViewForLeaf: started for leaf ${leafId}, viewType: ${viewType}`);
 
@@ -69,7 +69,7 @@ export class ViewLazyLoader {
             }
 
             // Check if plugin was already loaded before we try to load it
-            const wasLoaded = isPluginLoaded(this.ctx.app, pluginId);
+            const wasLoaded = isPluginLoaded(this.ctx.app, pluginId, true);
             
             logger.debug(`[LazyPlugins] initializeLazyViewForLeaf: target plugin: ${pluginId}, wasLoaded: ${wasLoaded}`);
 
@@ -79,13 +79,7 @@ export class ViewLazyLoader {
 
             // Only rebuild the view if the plugin was freshly loaded
             if (!wasLoaded) {
-                logger.debug(`[LazyPlugins] initializeLazyViewForLeaf: triggering rebuildLeafView for leaf ${leafId}`);
-                try {
-                    await rebuildLeafView(leaf);
-                    logger.debug(`[LazyPlugins] initializeLazyViewForLeaf: rebuildLeafView completed for leaf ${leafId}`);
-                } catch (e) {
-                    logger.debug(`[LazyPlugins] ViewLazyLoader: error rebuilding view after loading ${pluginId}`, e);
-                }
+                await rebuildLeafView(leaf);
             }
 
             this.commandRegistry.syncCommandWrappersForPlugin(pluginId);

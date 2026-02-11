@@ -3,7 +3,7 @@ import { saveJSON } from "../../core/storage";
 import log from "loglevel";
 import { ProgressDialog } from "../../utils/progress";
 import { ON_DEMAND_PLUGIN_ID } from "../../utils/constants";
-import { isPluginLoaded, isPluginEnabled, PluginsMap } from "../../utils/utils";
+import { isPluginLoaded, isPluginEnabled } from "../../utils/utils";
 import { PluginMode } from "../../core/types";
 import { Commands, Plugins } from "obsidian-typings";
 import { Mutex } from "async-mutex";
@@ -78,7 +78,7 @@ class ViewRegistryInterceptor {
  * Helper to wait for plugin load completion
  */
 class PluginLoadWaiter {
-    constructor(private plugins: PluginsMap | undefined) {}
+    constructor(private app: any) {}
 
     /**
      * Wait until all specified plugins have finished loading
@@ -88,7 +88,7 @@ class PluginLoadWaiter {
 
         try {
             await pWaitFor(
-                () => pluginIds.every((id) => isPluginLoaded(this.plugins, id)),
+                () => pluginIds.every((id) => isPluginLoaded(this.app, id)),
                 { interval: 100, timeout: timeoutMs },
             );
             return true;
@@ -114,7 +114,7 @@ class PluginLoadWaiter {
         while (true) {
             if (isCancelled()) return false;
 
-            if (pluginIds.every((id) => isPluginLoaded(this.plugins, id))) {
+            if (pluginIds.every((id) => isPluginLoaded(this.app, id))) {
                 return true;
             }
 
@@ -184,7 +184,7 @@ class PluginBulkLoader {
             progress?.setProgress(index + 1);
 
             const loaded = isPluginLoaded(
-                this.ctx.obsidianPlugins.plugins,
+                this.ctx.app,
                 plugin.id,
             );
             const enabled = isPluginEnabled(
@@ -238,7 +238,7 @@ export class StartupPolicyService {
             ctx.app,
             (pluginId) => ctx.getPluginMode(pluginId),
         );
-        this.pluginLoadWaiter = new PluginLoadWaiter(ctx.obsidianPlugins.plugins);
+        this.pluginLoadWaiter = new PluginLoadWaiter(ctx.app);
         this.persistenceManager = new PersistenceManager(ctx.app, ctx, registry);
         this.pluginBulkLoader = new PluginBulkLoader(ctx, commandCacheService);
     }

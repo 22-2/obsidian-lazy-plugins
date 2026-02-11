@@ -1,5 +1,5 @@
 import { LogLevelDesc, default as log } from "loglevel";
-import { WorkspaceLeaf } from "obsidian";
+import { App, WorkspaceLeaf } from "obsidian";
 
 export function sleep(ms: number) {
     return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -33,16 +33,21 @@ export function checkViewIsGone(leaf: WorkspaceLeaf): boolean {
 }
 
 export function isPluginLoaded(
-    app: any,
+    app: App,
     pluginId: string,
+    strict = false
 ): boolean {
     const plugins = app.plugins;
     if (!plugins) return false;
     
     const isEnabled = plugins.enabledPlugins?.has(pluginId);
     const isLoaded = Boolean(plugins.plugins?.[pluginId]?._loaded);
-    
-    return Boolean(isEnabled && isLoaded);
+
+    if (strict) {
+        return Boolean(isEnabled && isLoaded);
+    } else {
+        return Boolean(isLoaded);
+    }
 }
 
 export type PluginsMap = Record<string, { _loaded?: boolean }>;

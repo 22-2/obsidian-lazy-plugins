@@ -57,29 +57,29 @@ export class FileLazyLoader {
         
         const release = await this.lockStrategy.lock(leaf);
         try {
-            logger.debug(`[LazyPlugins] checkFileForLazyLoading: started for ${file.path} in leaf ${leafId}`);
+            logger.debug(`started for ${file.path} in leaf ${leafId}`);
 
             const pluginId = await resolvePluginForFile(this.ctx, file);
             if (!pluginId) {
-                logger.debug(`[LazyPlugins] checkFileForLazyLoading: no plugin resolved for ${file.path}`);
+                logger.debug(`no plugin resolved for ${file.path}`);
                 return;
             }
 
             // Skip if plugin is already loaded — nothing to do
-            const wasLoaded = isPluginLoaded(this.ctx.app, pluginId);
+            const wasLoaded = isPluginLoaded(this.ctx.app, pluginId, true);
             
-            logger.debug(`[LazyPlugins] checkFileForLazyLoading: target plugin: ${pluginId}, wasLoaded: ${wasLoaded}`);
+            logger.debug(`target plugin: ${pluginId}, wasLoaded: ${wasLoaded}`);
             if (wasLoaded) {
-                logger.debug(`[LazyPlugins] checkFileForLazyLoading: skipping ${pluginId} as it is already loaded`);
+                logger.debug(`skipping ${pluginId} as it is already loaded`);
                 return;
             }
 
-            logger.debug(`[LazyPlugins] checkFileForLazyLoading: ensuring ${pluginId} is loaded...`);
+            logger.debug(`ensuring ${pluginId} is loaded...`);
             const loaded = await this.pluginLoader.ensurePluginLoaded(pluginId);
-            logger.debug(`[LazyPlugins] checkFileForLazyLoading: ensurePluginLoaded result for ${pluginId}: ${loaded}`);
+            logger.debug(`ensurePluginLoaded result for ${pluginId}: ${loaded}`);
             
-            if (loaded) {
-                logger.debug(`[LazyPlugins] checkFileForLazyLoading: plugin ${pluginId} loaded, rebuilding leaf view for leaf ${leafId}...`);
+            if (!loaded) {
+                logger.debug(`plugin ${pluginId} loaded, rebuilding leaf view for leaf ${leafId}...`);
                 return;
             }
 
@@ -88,21 +88,21 @@ export class FileLazyLoader {
             // await new Promise(resolve => setTimeout(resolve, 150));
 
             const oldViewType = leaf.view.getViewType();
-            logger.debug(`[LazyPlugins] checkFileForLazyLoading: triggering rebuildLeafView for leaf ${leafId}. Current viewType: ${oldViewType}`);
+            logger.debug(`triggering rebuildLeafView for leaf ${leafId}. Current viewType: ${oldViewType}`);
             
             await rebuildLeafView(leaf);
             
             const newViewType = leaf.view.getViewType();
-            logger.debug(`[LazyPlugins] checkFileForLazyLoading: rebuildLeafView completed for leaf ${leafId}. New viewType: ${newViewType}`);
+            logger.debug(`rebuildLeafView completed for leaf ${leafId}. New viewType: ${newViewType}`);
             
             if (newViewType === oldViewType && oldViewType === 'markdown') {
-                logger.debug(`[LazyPlugins] checkFileForLazyLoading: View type remains 'markdown'. Trying forceful setViewState fallback...`);
+                logger.debug(`View type remains 'markdown'. Trying forceful setViewState fallback...`);
                 const state = leaf.getViewState();
                 // Re-setting the state with the same file often triggers a view re-evaluation
                 await leaf.setViewState(state);
                 
                 const finalViewType = leaf.view.getViewType();
-                logger.debug(`[LazyPlugins] checkFileForLazyLoading: after setViewState fallback, viewType is: ${finalViewType}`);
+                logger.debug(`after setViewState fallback, viewType is: ${finalViewType}`);
             }
         } finally {
             release.unlock();
