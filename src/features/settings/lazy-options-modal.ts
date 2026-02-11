@@ -41,7 +41,7 @@ export class LazyOptionsModal extends Modal {
 
         // --- View Settings ---
         new Setting(contentEl)
-            .setName("Lazy on View")
+            .setName("Lazy on view")
             .setDesc("Load plugin when specific view types are opened.")
             .addToggle(toggle => toggle
                 .setValue(this.options.useView)
@@ -66,7 +66,7 @@ export class LazyOptionsModal extends Modal {
 
         // --- File Settings ---
         new Setting(contentEl)
-            .setName("Lazy on File")
+            .setName("Lazy on file")
             .setDesc("Load plugin when specific files are opened (by suffix, etc.).")
             .addToggle(toggle => toggle
                 .setValue(this.options.useFile)
