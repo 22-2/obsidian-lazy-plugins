@@ -36,6 +36,10 @@ Add a screenshot of the On‑Demand Plugins settings page to make the setup clea
 ![On‑Demand Plugins settings](assets/ss.png)
 *Screenshot of the On‑Demand Plugins settings page.*
 
+<!-- Screenshot: On-Demand Modal -->
+![On‑Demand Modal](assets/ss-modal.png)
+*Screenshot of the settings modal.*
+
 ## ⚠️ Recommended Usage & Warnings
 
 ### Important: Backup community-plugins.json

@@ -36,6 +36,10 @@
 ![On‑Demand Plugins settings](assets/ss.png)
 *On‑Demand Plugins 設定ページのスクリーンショット.*
 
+<!-- Screenshot: On-Demand Modal -->
+![On‑Demand Modal](assets/ss-modal.png)
+*設定モーダルのスクリーンショット.*
+
 ## ⚠️ 推奨使用法と警告
 
 ### 重要: `community-plugins.json` のバックアップ
