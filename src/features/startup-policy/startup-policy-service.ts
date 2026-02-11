@@ -322,10 +322,10 @@ export class StartupPolicyService {
     }
 
     private getLazyManifests(manifests: PluginManifest[]) {
-        return manifests.filter((plugin) => {
-                const mode = this.ctx.getPluginMode(plugin.id);
-                return isLazyMode(mode);
-            });
+        // Only legacy `lazyOnView` plugins need to be loaded during the
+        // startup apply step so we can detect view registrations. Regular
+        // `lazy` plugins should not be enabled at startup.
+        return manifests.filter((plugin) => this.ctx.getPluginMode(plugin.id) === "lazyOnView");
     }
 
     private createProgressDialog(

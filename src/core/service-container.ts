@@ -116,10 +116,7 @@ export class ServiceContainer {
         // Show a progress dialog early to cover the command cache rebuild and the
         // subsequent startup policy apply steps.
         const manifests = this.ctx.getManifests();
-        const lazyCount = manifests.filter((p) => {
-            const mode = this.ctx.getPluginMode(p.id);
-            return isLazyMode(mode);
-        }).length;
+        const lazyCount = manifests.filter((p) => this.ctx.getPluginMode(p.id) === "lazyOnView").length;
 
         const progress = new ProgressDialog(this.ctx.app, {
             title: "Rebuilding command cache",
