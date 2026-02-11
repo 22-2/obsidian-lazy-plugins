@@ -176,23 +176,24 @@ export class SettingsTab extends PluginSettingTab {
                 this.updateApplyButton();
             });
 
-        // Add the filter buttons
+        // Filter dropdown for plugin list (replaces previous filter buttons)
         new Setting(this.containerEl)
             .setName("Plugins (register lazy ones here)")
             .setHeading()
             .setDesc("Filter by: ")
-            // Add the buttons to filter by startup method
-            .then((setting) => {
-                this.addFilterButton(setting.descEl, "All");
+            .addDropdown((dropdown) => {
+                // Empty key represents the "All" option
+                dropdown.addOption("", "All");
                 Object.keys(PluginModes)
-                .filter((key) => key !== "lazyOnView")
-                .forEach((key) =>
-                    this.addFilterButton(
-                        setting.descEl,
-                        PluginModes[key as PluginMode],
-                        key as PluginMode,
-                    ),
-                );
+                    .filter((key) => key !== "lazyOnView")
+                    .forEach((key) =>
+                        dropdown.addOption(key, PluginModes[key as PluginMode]),
+                    );
+                dropdown.setValue(this.filterMethod ?? "");
+                dropdown.onChange((value: string) => {
+                    this.filterMethod = value === "" ? undefined : (value as PluginMode);
+                    this.buildPluginList();
+                });
             });
         new Setting(this.containerEl)
             .then((setting) => {
@@ -331,14 +332,7 @@ export class SettingsTab extends PluginSettingTab {
     /**
      * Add a filter button in the header of the plugin list
      */
-    addFilterButton(el: HTMLElement, text: string, value?: PluginMode) {
-        const link = el.createEl("button", { text });
-        link.addClass("lazy-plugin-filter");
-        link.onclick = () => {
-            this.filterMethod = value;
-            this.buildPluginList();
-        };
-    }
+    
 
     updateApplyButton() {
         if (!this.applyButton) return;
