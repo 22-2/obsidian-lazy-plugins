@@ -184,7 +184,9 @@ export class SettingsTab extends PluginSettingTab {
             // Add the buttons to filter by startup method
             .then((setting) => {
                 this.addFilterButton(setting.descEl, "All");
-                Object.keys(PluginModes).forEach((key) =>
+                Object.keys(PluginModes)
+                .filter((key) => key !== "lazyOnView")
+                .forEach((key) =>
                     this.addFilterButton(
                         setting.descEl,
                         PluginModes[key as PluginMode],
@@ -319,7 +321,9 @@ export class SettingsTab extends PluginSettingTab {
      * Add the dropdown select options for each delay type
      */
     addModeOptions(el: DropdownComponent) {
-        Object.keys(PluginModes).forEach((key) => {
+        Object.keys(PluginModes)
+        .filter((key) => key !== "lazyOnView")
+        .forEach((key) => {
             el.addOption(key, PluginModes[key as PluginMode]);
         });
     }
