@@ -14,11 +14,11 @@ import { LazyCommandRunner } from "../features/lazy-runner/lazy-command-runner";
 import { PluginRegistry } from "../features/registry/plugin-registry";
 import { SettingsService } from "../features/settings/settings-service";
 import { StartupPolicyService } from "../features/startup-policy/startup-policy-service";
-import { ViewLazyLoader } from "../features/view-loader/view-lazy-loader";
-import { FileLazyLoader } from "../features/view-loader/file-lazy-loader";
+import { ViewLazyLoader } from "../features/lazy-loader/view-lazy-loader";
+import { FileLazyLoader } from "../features/lazy-loader/file-lazy-loader";
 import { patchPluginEnableDisable } from "../patches/plugin-enable-disable";
 import { patchSetViewState } from "../patches/view-state";
-import { LeafLockManager, LeafViewLockStrategy } from "../features/view-loader/helpers/leaf-lock";
+import { LeafLockManager, LeafViewLockStrategy } from "../features/lazy-loader/helpers/leaf-lock";
 
 
 export class ServiceContainer {
