@@ -2,7 +2,7 @@ import { WorkspaceLeaf, debounce } from "obsidian";
 import { PluginContext } from "../../core/plugin-context";
 import { CommandRegistry, PluginLoader } from "../../core/interfaces";
 import { isLeafVisible } from "../../utils/utils";
-import { LockStrategy } from "./leaf-lock";
+import { LeafResource, LockStrategy } from "./leaf-lock";
 import { resolvePluginForViewType } from "./activation-rules";
 import { BaseLazyLoader } from "./base-lazy-loader";
 import log from "loglevel";
@@ -14,7 +14,7 @@ const logger = log.getLogger("OnDemandPlugin/ViewLazyLoader");
  * When a leaf with a specific view type becomes active, the corresponding
  * plugin is loaded and commands are synchronized.
  */
-export class ViewLazyLoader extends BaseLazyLoader<{ leaf: WorkspaceLeaf; viewType: string }> {
+export class ViewLazyLoader extends BaseLazyLoader<LeafResource> {
     private debouncedInitializeLazyViewForLeaf = debounce(
         this.initializeLazyViewForLeaf.bind(this),
         100,
@@ -25,7 +25,7 @@ export class ViewLazyLoader extends BaseLazyLoader<{ leaf: WorkspaceLeaf; viewTy
         ctx: PluginContext,
         pluginLoader: PluginLoader & { ensurePluginLoaded(pluginId: string): Promise<boolean> },
         private commandRegistry: CommandRegistry,
-        lockStrategy: LockStrategy<{ leaf: WorkspaceLeaf; viewType: string }>,
+        lockStrategy: LockStrategy<LeafResource>,
     ) {
         super(ctx, pluginLoader, lockStrategy);
     }

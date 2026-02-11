@@ -17,7 +17,7 @@ export interface LockStrategy<T> {
 /**
  * Handle for releasing an acquired lock.
  */
-export interface LockRelease {
+interface LockRelease {
     /**
      * Releases the lock. Should be called in a finally block to ensure cleanup.
      */
@@ -67,10 +67,12 @@ export class LeafLockManager {
  * Specialized strategy for locking a leaf based on its viewType.
  * Used by ViewLazyLoader to prevent concurrent processing of the same view type.
  */
-export class LeafViewLockStrategy implements LockStrategy<{ leaf: WorkspaceLeaf; viewType: string }> {
+export class LeafViewLockStrategy implements LockStrategy<LeafResource> {
     constructor(private manager: LeafLockManager) {}
 
-    async lock(target: { leaf: WorkspaceLeaf; viewType: string }): Promise<LockRelease> {
+    async lock(target: LeafResource): Promise<LockRelease> {
         return this.manager.lock(target.leaf, `view:${target.viewType}`);
     }
 }
+
+export type LeafResource = { leaf: WorkspaceLeaf; viewType: string };
