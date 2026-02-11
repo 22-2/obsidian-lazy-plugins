@@ -204,7 +204,7 @@ export class SettingsTab extends PluginSettingTab {
                     this.buildPluginList();
                 }),
             );
-
+            
         // Add an element to contain the plugin list
         this.pluginListContainer = this.containerEl.createEl("div");
         this.buildPluginList();
@@ -235,7 +235,11 @@ export class SettingsTab extends PluginSettingTab {
                 .setIcon("gear")
                 .setTooltip("Advanced lazy options")
                 .onClick(() => {
-                    new LazyOptionsModal(this.app, this.plugin, plugin.id).open();
+                    new LazyOptionsModal(this.app, this.plugin, plugin.id, () => {
+                        this.pendingPluginIds.add(plugin.id);
+                        this.updateApplyButton();
+                        this.buildPluginList();
+                    }).open();
                 });
 
             // Only show for lazy modes

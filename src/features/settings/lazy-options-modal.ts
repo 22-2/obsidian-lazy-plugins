@@ -1,11 +1,14 @@
-import { App, Modal, Setting } from "obsidian";
+import { App, Modal, Notice, Setting } from "obsidian";
 import OnDemandPlugin from "../../main";
 import { LazyOptions } from "../../core/types";
+import log from "loglevel";
+
+const logger = log.getLogger("OnDemandPlugin/LazyOptionsModal");
 
 export class LazyOptionsModal extends Modal {
     private options: LazyOptions;
 
-    constructor(app: App, private plugin: OnDemandPlugin, private pluginId: string) {
+    constructor(app: App, private plugin: OnDemandPlugin, private pluginId: string, private onSave?: () => void) {
         super(app);
         const settings = this.plugin.settings.plugins[this.pluginId];
         
@@ -116,7 +119,7 @@ export class LazyOptionsModal extends Modal {
                 .setButtonText("Cancel")
                 .onClick(() => this.close())
             )
-            .addButton(btn => btn
+                .addButton(btn => btn
                 .setButtonText("Save Options")
                 .setCta()
                 .onClick(async () => {
@@ -128,6 +131,13 @@ export class LazyOptionsModal extends Modal {
                         this.plugin.settings.lazyOnFiles[this.pluginId] = this.options.useFile ? this.options.fileCriteria : {};
                         
                         await this.plugin.saveSettings();
+                    }
+                    // Notify caller (SettingsTab) so it can mark this plugin as pending
+                    try {
+                        this.onSave?.();
+                    } catch (e) {
+                        new Notice("Error in onSave callback: " + e);
+                        logger.error("Error in LazyOptionsModal onSave callback", e);
                     }
                     this.close();
                 })
