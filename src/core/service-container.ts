@@ -168,7 +168,7 @@ export class ServiceContainer {
      * Apply startup policy to specified plugins or all plugins.
      */
     async applyStartupPolicy(pluginIds?: string[]) {
-        await this.startupPolicy.apply(pluginIds);
+        await this.startupPolicy.applyWithProgress(null, pluginIds);
     }
 
     /**
