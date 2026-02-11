@@ -176,38 +176,35 @@ export class SettingsTab extends PluginSettingTab {
                 this.updateApplyButton();
             });
 
-        // Filter dropdown for plugin list (replaces previous filter buttons)
+        // Plugin list header: results count, keyword filter, and filter dropdown (dropdown placed to the right of the keyword input)
         new Setting(this.containerEl)
             .setName("Plugins (register lazy ones here)")
             .setHeading()
             .setDesc("Filter by: ")
+            .then((setting) => {
+                this.resultsCountEl = setting.controlEl.createEl("span", {
+                    cls: "lazy-plugin-results-count",
+                });
+            })
+            // Add a free-text filter first, then the dropdown appears to its right
+            .addText((text) =>
+                text.setPlaceholder("Type to filter list").onChange((value) => {
+                    this.filterString = value;
+                    this.buildPluginList();
+                }),
+            )
             .addDropdown((dropdown) => {
                 // Empty key represents the "All" option
                 dropdown.addOption("", "All");
                 Object.keys(PluginModes)
                     .filter((key) => key !== "lazyOnView")
-                    .forEach((key) =>
-                        dropdown.addOption(key, PluginModes[key as PluginMode]),
-                    );
+                    .forEach((key) => dropdown.addOption(key, PluginModes[key as PluginMode]));
                 dropdown.setValue(this.filterMethod ?? "");
                 dropdown.onChange((value: string) => {
                     this.filterMethod = value === "" ? undefined : (value as PluginMode);
                     this.buildPluginList();
                 });
             });
-        new Setting(this.containerEl)
-            .then((setting) => {
-                this.resultsCountEl = setting.controlEl.createEl("span", {
-                    cls: "lazy-plugin-results-count",
-                });
-            })
-            // Add a free-text filter
-            .addText((text) =>
-                text.setPlaceholder("Type to filter list").onChange((value) => {
-                    this.filterString = value;
-                    this.buildPluginList();
-                }),
-            );
             
         // Add an element to contain the plugin list
         this.pluginListContainer = this.containerEl.createEl("div");
