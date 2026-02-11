@@ -5,7 +5,7 @@
  * where the object graph is assembled, replacing the ad-hoc callback
  * wiring that was previously spread across main.ts.
  */
-import { PluginManifest } from "obsidian";
+import { PluginManifest, WorkspaceLeaf } from "obsidian";
 import { PluginContext } from "./plugin-context";
 import { CommandCacheService } from "../features/command-cache/command-cache-service";
 import { LazyCommandRunner } from "../features/lazy-runner/lazy-command-runner";
