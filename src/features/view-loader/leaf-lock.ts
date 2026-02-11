@@ -13,22 +13,28 @@ export interface LockRelease {
 }
 
 /**
- * Lock strategy specifically for WorkspaceLeaf and viewType combinations.
- * Ensures that lazy loading for the same leaf+viewType combination is serialized.
+ * Centralized lock manager that uses WeakMap to associate Mutexes with WorkspaceLeafs.
+ * This ensures that when a leaf is destroyed/GC'd, its associated Mutexes are also collected.
  */
-export class LeafViewLockStrategy implements LockStrategy<{ leaf: WorkspaceLeaf; viewType: string }> {
-    // Map of key -> Mutex from `async-mutex`.
-    private keyedMutex = new Map<string, Mutex>();
-    private leafIds = new WeakMap<WorkspaceLeaf, string>();
-    private nextLeafId = 1;
+export class LeafLockManager {
+    private leafMutexes = new WeakMap<WorkspaceLeaf, Map<string, Mutex>>();
 
-    async lock(target: { leaf: WorkspaceLeaf; viewType: string }): Promise<LockRelease> {
-        const key = this.keyFor(target.leaf, target.viewType);
-        let mutex = this.keyedMutex.get(key);
+    /**
+     * Acquires a lock for a specific leaf, optionally specialized by a sub-key (like viewType).
+     */
+    async lock(leaf: WorkspaceLeaf, subKey: string = "default"): Promise<LockRelease> {
+        let subMap = this.leafMutexes.get(leaf);
+        if (!subMap) {
+            subMap = new Map<string, Mutex>();
+            this.leafMutexes.set(leaf, subMap);
+        }
+
+        let mutex = subMap.get(subKey);
         if (!mutex) {
             mutex = new Mutex();
-            this.keyedMutex.set(key, mutex);
+            subMap.set(subKey, mutex);
         }
+
         const release = await mutex.acquire();
         return {
             unlock: () => {
@@ -36,26 +42,37 @@ export class LeafViewLockStrategy implements LockStrategy<{ leaf: WorkspaceLeaf;
             },
         };
     }
+}
 
-    private keyFor(leaf: WorkspaceLeaf, viewType: string): string {
-        let id = this.leafIds.get(leaf);
-        if (!id) {
-            id = String(this.nextLeafId++);
-            this.leafIds.set(leaf, id);
-        }
-        return `leaf:${id}:view:${viewType}`;
+/**
+ * Specialized strategy for locking a leaf based on its viewType.
+ * (Used by ViewLazyLoader)
+ */
+export class LeafViewLockStrategy implements LockStrategy<{ leaf: WorkspaceLeaf; viewType: string }> {
+    constructor(private manager: LeafLockManager) {}
+
+    async lock(target: { leaf: WorkspaceLeaf; viewType: string }): Promise<LockRelease> {
+        return this.manager.lock(target.leaf, `view:${target.viewType}`);
     }
 }
 
 /**
- * No-op lock strategy for testing or scenarios where locking is not needed
+ * Specialized strategy for locking a leaf regardless of its viewType.
+ * (Used by FileLazyLoader)
+ */
+export class LeafLockStrategy implements LockStrategy<WorkspaceLeaf> {
+    constructor(private manager: LeafLockManager) {}
+
+    async lock(leaf: WorkspaceLeaf): Promise<LockRelease> {
+        return this.manager.lock(leaf, "leaf-generic");
+    }
+}
+
+/**
+ * No-op lock strategy for testing
  */
 export class NoOpLockStrategy<T> implements LockStrategy<T> {
     async lock(_target: T): Promise<LockRelease> {
-        return {
-            unlock: () => {
-                // No-op
-            },
-        };
+        return { unlock: () => {} };
     }
 }

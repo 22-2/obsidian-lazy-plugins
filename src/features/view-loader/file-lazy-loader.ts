@@ -1,19 +1,18 @@
-import { TFile, WorkspaceLeaf } from "obsidian";
-import { PluginContext } from "../../core/plugin-context";
-import { PluginLoader } from "../../core/interfaces";
-import { rebuildLeafView, isPluginLoaded, PluginsMap } from "../../utils/utils";
-import { resolvePluginForFile } from "./activation-rules";
 import log from "loglevel";
+import { TFile, WorkspaceLeaf } from "obsidian";
+import { PluginLoader } from "../../core/interfaces";
+import { PluginContext } from "../../core/plugin-context";
+import { isPluginLoaded, rebuildLeafView } from "../../utils/utils";
+import { resolvePluginForFile } from "./activation-rules";
+import { LeafLockManager, LockStrategy } from "./leaf-lock";
 
 const logger = log.getLogger("OnDemandPlugin/FileLazyLoader");
 
 export class FileLazyLoader {
-    /** Guard against re-entrant calls caused by rebuildLeafView firing file-open */
-    private processing = new WeakSet<WorkspaceLeaf>();
-
     constructor(
         private ctx: PluginContext,
         private pluginLoader: PluginLoader & { ensurePluginLoaded(pluginId: string): Promise<boolean> },
+        private lockStrategy: LockStrategy<WorkspaceLeaf> = new LeafLockManager(),
     ) {}
 
     register(): void {
@@ -22,10 +21,16 @@ export class FileLazyLoader {
         this.ctx.registerEvent(
             app.workspace.on("file-open", async (file: TFile | null) => {
                 if (!file) return;
-                const leaf = app.workspace.getLeaf(false);
-                if (leaf) {
-                    await this.checkFileForLazyLoading(file, leaf);
-                }
+                
+                // Allow a tiny bit of time for the workspace to update which leaf is showing the file
+                await new Promise(resolve => setTimeout(resolve, 50));
+
+                app.workspace.iterateAllLeaves((leaf) => {
+                    const viewFile = (leaf.view as any).file;
+                    if (viewFile === file) {
+                        void this.checkFileForLazyLoading(file, leaf);
+                    }
+                });
             }),
         );
 
@@ -49,41 +54,58 @@ export class FileLazyLoader {
 
     private async checkFileForLazyLoading(file: TFile, leaf: WorkspaceLeaf): Promise<void> {
         const leafId = (leaf as any).id || 'unknown';
-        logger.debug(`[LazyPlugins] checkFileForLazyLoading: started for ${file.path} in leaf ${leafId}`);
-
-        // Re-entry guard
-        if (this.processing.has(leaf)) {
-            logger.debug(`[LazyPlugins] checkFileForLazyLoading: skipped (processing) for leaf ${leafId}`);
-            return;
-        }
-
-        const pluginId = await resolvePluginForFile(this.ctx, file);
-        if (!pluginId) {
-            logger.debug(`[LazyPlugins] checkFileForLazyLoading: no plugin resolved for ${file.path}`);
-            return;
-        }
-
-        // Skip if plugin is already loaded — nothing to do
-        const wasLoaded = isPluginLoaded(this.ctx.app, pluginId);
         
-        logger.debug(`[LazyPlugins] checkFileForLazyLoading: target plugin: ${pluginId}, wasLoaded: ${wasLoaded}`);
-        if (wasLoaded) return;
-
-        this.processing.add(leaf);
+        const release = await this.lockStrategy.lock(leaf);
         try {
+            logger.debug(`[LazyPlugins] checkFileForLazyLoading: started for ${file.path} in leaf ${leafId}`);
+
+            const pluginId = await resolvePluginForFile(this.ctx, file);
+            if (!pluginId) {
+                logger.debug(`[LazyPlugins] checkFileForLazyLoading: no plugin resolved for ${file.path}`);
+                return;
+            }
+
+            // Skip if plugin is already loaded — nothing to do
+            const wasLoaded = isPluginLoaded(this.ctx.app, pluginId);
+            
+            logger.debug(`[LazyPlugins] checkFileForLazyLoading: target plugin: ${pluginId}, wasLoaded: ${wasLoaded}`);
+            if (wasLoaded) {
+                logger.debug(`[LazyPlugins] checkFileForLazyLoading: skipping ${pluginId} as it is already loaded`);
+                return;
+            }
+
+            logger.debug(`[LazyPlugins] checkFileForLazyLoading: ensuring ${pluginId} is loaded...`);
             const loaded = await this.pluginLoader.ensurePluginLoaded(pluginId);
-            logger.debug(`[LazyPlugins] checkFileForLazyLoading: ensurePluginLoaded result: ${loaded}`);
+            logger.debug(`[LazyPlugins] checkFileForLazyLoading: ensurePluginLoaded result for ${pluginId}: ${loaded}`);
+            
             if (loaded) {
-                logger.debug(`[LazyPlugins] checkFileForLazyLoading: triggering rebuildLeafView for leaf ${leafId}`);
-                try {
-                    await rebuildLeafView(leaf);
-                    logger.debug(`[LazyPlugins] checkFileForLazyLoading: rebuildLeafView completed for leaf ${leafId}`);
-                } catch (e) {
-                    logger.debug(`[LazyPlugins] FileLazyLoader: error rebuilding view for ${pluginId}`, e);
-                }
+                logger.debug(`[LazyPlugins] checkFileForLazyLoading: plugin ${pluginId} loaded, rebuilding leaf view for leaf ${leafId}...`);
+                return;
+            }
+
+            // Give the plugin a bit of time to settle (register views etc)
+            // Some plugins might do things in queueMicrotask or setTimeout(0) during onload
+            // await new Promise(resolve => setTimeout(resolve, 150));
+
+            const oldViewType = leaf.view.getViewType();
+            logger.debug(`[LazyPlugins] checkFileForLazyLoading: triggering rebuildLeafView for leaf ${leafId}. Current viewType: ${oldViewType}`);
+            
+            await rebuildLeafView(leaf);
+            
+            const newViewType = leaf.view.getViewType();
+            logger.debug(`[LazyPlugins] checkFileForLazyLoading: rebuildLeafView completed for leaf ${leafId}. New viewType: ${newViewType}`);
+            
+            if (newViewType === oldViewType && oldViewType === 'markdown') {
+                logger.debug(`[LazyPlugins] checkFileForLazyLoading: View type remains 'markdown'. Trying forceful setViewState fallback...`);
+                const state = leaf.getViewState();
+                // Re-setting the state with the same file often triggers a view re-evaluation
+                await leaf.setViewState(state);
+                
+                const finalViewType = leaf.view.getViewType();
+                logger.debug(`[LazyPlugins] checkFileForLazyLoading: after setViewState fallback, viewType is: ${finalViewType}`);
             }
         } finally {
-            this.processing.delete(leaf);
+            release.unlock();
         }
     }
 }

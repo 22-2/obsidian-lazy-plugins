@@ -16,6 +16,8 @@ import { ViewLazyLoader } from "../features/view-loader/view-lazy-loader";
 import { FileLazyLoader } from "../features/view-loader/file-lazy-loader";
 import { patchPluginEnableDisable } from "../patches/plugin-enable-disable";
 import { patchSetViewState } from "../patches/view-state";
+import { LeafLockManager, LeafLockStrategy, LeafViewLockStrategy } from "../features/view-loader/leaf-lock";
+
 
 export class ServiceContainer {
     readonly registry: PluginRegistry;
@@ -52,15 +54,26 @@ export class ServiceContainer {
             this.registry,
         );
 
+        // --- View & File Loading Support ---
+
+        // Unified lock manager for memory-safe leaf locking
+        const lockManager = new LeafLockManager();
+
         // 7. ViewLazyLoader (needs ctx + pluginLoader + commandRegistry)
         this.viewLoader = new ViewLazyLoader(
             ctx,
             this.lazyRunner,
             this.commandCache,
+            new LeafViewLockStrategy(lockManager),
         );
 
         // 8. FileLazyLoader (needs ctx + pluginLoader)
-        this.fileLoader = new FileLazyLoader(ctx, this.lazyRunner);
+        this.fileLoader = new FileLazyLoader(
+            ctx,
+            this.lazyRunner,
+            new LeafLockStrategy(lockManager),
+        );
+
     }
 
     /**
