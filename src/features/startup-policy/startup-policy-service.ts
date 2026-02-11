@@ -152,8 +152,16 @@ class PersistenceManager {
      * Write the community-plugins file
      */
     async writeCommunityPlugins(enabledPlugins: Set<string>): Promise<void> {
+        // Only persist plugins that are explicitly `keepEnabled`.
+        // This prevents plugins configured as lazy (lazy / lazyOnView)
+        // from being written to community-plugins.json.
+        const toWrite = [...enabledPlugins].filter((id) =>
+            this.ctx.getPluginMode(id) === "keepEnabled" ||
+            id === ON_DEMAND_PLUGIN_ID,
+        );
+
         await this.registry.writeCommunityPluginsFile(
-            [...enabledPlugins].sort((a, b) => a.localeCompare(b)),
+            toWrite.sort((a, b) => a.localeCompare(b)),
             this.ctx.getData().showConsoleLog,
         );
     }
