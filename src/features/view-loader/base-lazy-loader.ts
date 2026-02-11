@@ -21,15 +21,21 @@ export abstract class BaseLazyLoader<TLockTarget> {
     /**
      * Template method for lazy loading a plugin.
      * Subclasses should implement the specific resolution logic.
+     * @returns true if the plugin was newly loaded, false if it was already loaded or failed to load
      */
     protected async loadPluginWithLock(
         lockTarget: TLockTarget,
         getPluginId: () => Promise<string | null>,
         context: { leafId: string; description: string },
-    ): Promise<void> {
+        actionInsideLock?: (wasNewlyLoaded: boolean) => Promise<void>,
+    ): Promise<boolean> {
         const release = await this.lockStrategy.lock(lockTarget);
         try {
-            await this.loadPlugin(getPluginId, context);
+            const wasNewlyLoaded = await this.loadPlugin(getPluginId, context);
+            if (actionInsideLock) {
+                await actionInsideLock(wasNewlyLoaded);
+            }
+            return wasNewlyLoaded;
         } finally {
             release.unlock();
         }
@@ -37,25 +43,26 @@ export abstract class BaseLazyLoader<TLockTarget> {
 
     /**
      * Core plugin loading logic shared by all lazy loaders.
+     * @returns true if the plugin was newly loaded, false if it was already loaded or failed to load
      */
     private async loadPlugin(
         getPluginId: () => Promise<string | null>,
         context: { leafId: string; description: string },
-    ): Promise<void> {
+    ): Promise<boolean> {
         logger.debug(`started for ${context.description} in leaf ${context.leafId}`);
 
         const pluginId = await getPluginId();
         if (!pluginId) {
             logger.debug(`no plugin resolved for ${context.description}`);
-            return;
+            return false;
         }
 
-        const wasLoaded = isPluginLoaded(this.ctx.app, pluginId, true);
+        const wasLoaded = isPluginLoaded(this.ctx.app, pluginId, false);
         logger.debug(`target plugin: ${pluginId}, wasLoaded: ${wasLoaded}`);
 
         if (wasLoaded) {
             logger.debug(`skipping ${pluginId} as it is already loaded`);
-            return;
+            return false;
         }
 
         logger.debug(`ensuring ${pluginId} is loaded...`);
@@ -64,8 +71,10 @@ export abstract class BaseLazyLoader<TLockTarget> {
 
         if (!loaded) {
             logger.debug(`plugin ${pluginId} failed to load`);
-            return;
+            return false;
         }
+
+        return true;
     }
 
     /**
