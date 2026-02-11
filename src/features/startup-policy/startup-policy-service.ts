@@ -152,16 +152,10 @@ class PersistenceManager {
      * Write the community-plugins file
      */
     async writeCommunityPlugins(enabledPlugins: Set<string>): Promise<void> {
-        // Only persist plugins that are explicitly `keepEnabled`.
-        // This prevents plugins configured as lazy (lazy / lazyOnView)
-        // from being written to community-plugins.json.
-        const toWrite = [...enabledPlugins].filter((id) =>
-            this.ctx.getPluginMode(id) === "keepEnabled" ||
-            id === ON_DEMAND_PLUGIN_ID,
-        );
-
+        // Write whatever set the caller provides. Caller is responsible
+        // for filtering to the desired set (e.g. `keepEnabled` only).
         await this.registry.writeCommunityPluginsFile(
-            toWrite.sort((a, b) => a.localeCompare(b)),
+            [...enabledPlugins].sort((a, b) => a.localeCompare(b)),
             this.ctx.getData().showConsoleLog,
         );
     }
@@ -389,7 +383,14 @@ export class StartupPolicyService {
             this.ctx.obsidianPlugins.enabledPlugins.add(pluginId);
         });
 
-        await this.persistenceManager.writeCommunityPlugins(desiredEnabled);
+        // Ensure only `keepEnabled` plugins (plus the on-demand plugin) are persisted.
+        const toPersist = new Set<string>(
+            [...desiredEnabled].filter(
+                (id) => this.ctx.getPluginMode(id) === "keepEnabled" || id === ON_DEMAND_PLUGIN_ID,
+            ),
+        );
+
+        await this.persistenceManager.writeCommunityPlugins(toPersist);
 
         if (shouldReload) {
             try {
