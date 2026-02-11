@@ -1,12 +1,10 @@
-import { test, expect } from "obsidian-e2e-toolkit";
+import { expect, test } from "obsidian-e2e-toolkit";
 import {
-    repoRoot,
-    pluginUnderTestId,
-    excalidrawPluginId,
     ensureBuilt,
-    useOnDemandPluginsWithExcalidraw,
+    excalidrawPluginId,
+    pluginUnderTestId,
+    useOnDemandPluginsWithExcalidraw
 } from "./test-utils";
-import { TFile } from "obsidian";
 
 useOnDemandPluginsWithExcalidraw();
 
