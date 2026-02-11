@@ -3,11 +3,13 @@ import { PluginContext } from "../../core/plugin-context";
 import { CommandRegistry, PluginLoader } from "../../core/interfaces";
 import { isLeafVisible, rebuildLeafView, isPluginLoaded, PluginsMap } from "../../utils/utils";
 import { LockStrategy, LeafViewLockStrategy } from "./leaf-lock";
+import { resolvePluginForViewType } from "./activation-rules";
 import log from "loglevel";
 
 const logger = log.getLogger("OnDemandPlugin/ViewLazyLoader");
 
 export class ViewLazyLoader {
+    /** Guard against re-entrant calls caused by rebuildLeafView firing active-leaf-change */
     private lastProcessed = new WeakMap<WorkspaceLeaf, { viewType: string; at: number }>();
     private readonly reentryWindowMs = 1500; // ms
     private debouncedInitializeLazyViewForLeaf = debounce(
@@ -37,45 +39,56 @@ export class ViewLazyLoader {
     }
 
     async initializeLazyViewForLeaf(leaf: WorkspaceLeaf): Promise<void> {
-        // Avoid loading lazy-on-view plugins during layout restoration.
         if (!this.ctx.app.workspace.layoutReady) return;
         if (!leaf) return;
+        
         const viewType = leaf.view.getViewType();
+        const leafId = (leaf as any).id || 'unknown';
+        
+        logger.debug(`[LazyPlugins] initializeLazyViewForLeaf: started for leaf ${leafId}, viewType: ${viewType}`);
 
         const release = await this.lockStrategy.lock({ leaf, viewType });
         try {
             if (!this.ctx.app.workspace.layoutReady) return;
-            if (!isLeafVisible(leaf)) return;
-
-            const last = this.lastProcessed.get(leaf);
-            if (last && last.viewType === viewType && Date.now() - last.at < this.reentryWindowMs) {
+            if (!isLeafVisible(leaf)) {
+                logger.debug(`[LazyPlugins] initializeLazyViewForLeaf: skipped (not visible) for leaf ${leafId}`);
                 return;
             }
-            const pluginId = this.getPluginIdForViewType(viewType);
-            if (!pluginId) return;
 
-            if (this.ctx.getPluginMode(pluginId) !== "lazyOnView") return;
+            // Re-entry guard: skip if we recently processed this leaf+viewType
+            const last = this.lastProcessed.get(leaf);
+            if (last && last.viewType === viewType && Date.now() - last.at < this.reentryWindowMs) {
+                logger.debug(`[LazyPlugins] initializeLazyViewForLeaf: skipped (recent) for leaf ${leafId}`);
+                return;
+            }
 
-            // If the plugin was already loaded, there's no need to rebuild the view
-            const plugins = (this.ctx.app as unknown as { plugins?: PluginsMap }).plugins;
-            const wasLoaded = isPluginLoaded(plugins, pluginId);
+            const pluginId = resolvePluginForViewType(this.ctx, viewType);
+            if (!pluginId) {
+                logger.debug(`[LazyPlugins] initializeLazyViewForLeaf: no plugin found for viewType: ${viewType}`);
+                return;
+            }
+
+            // Check if plugin was already loaded before we try to load it
+            const wasLoaded = isPluginLoaded(this.ctx.app, pluginId);
+            
+            logger.debug(`[LazyPlugins] initializeLazyViewForLeaf: target plugin: ${pluginId}, wasLoaded: ${wasLoaded}`);
 
             const loaded = await this.pluginLoader.ensurePluginLoaded(pluginId);
+            logger.debug(`[LazyPlugins] initializeLazyViewForLeaf: ensurePluginLoaded result: ${loaded}`);
             if (!loaded) return;
 
-            // Only reconstruct the view if the plugin was not already loaded before this call.
+            // Only rebuild the view if the plugin was freshly loaded
             if (!wasLoaded) {
+                logger.debug(`[LazyPlugins] initializeLazyViewForLeaf: triggering rebuildLeafView for leaf ${leafId}`);
                 try {
                     await rebuildLeafView(leaf);
+                    logger.debug(`[LazyPlugins] initializeLazyViewForLeaf: rebuildLeafView completed for leaf ${leafId}`);
                 } catch (e) {
-                    // Keep behaviour consistent with other callers: don't throw on rebuild failure
-                    // (logging is handled elsewhere)
-                    logger.debug(`ViewLazyLoader: error rebuilding view for leaf after loading plugin ${pluginId}`, e);
+                    logger.debug(`[LazyPlugins] ViewLazyLoader: error rebuilding view after loading ${pluginId}`, e);
                 }
             }
 
             this.commandRegistry.syncCommandWrappersForPlugin(pluginId);
-            // record that we processed this leaf+viewType
             this.lastProcessed.set(leaf, { viewType, at: Date.now() });
         } finally {
             release.unlock();
@@ -86,24 +99,9 @@ export class ViewLazyLoader {
         if (!viewType) return;
         if (!this.ctx.app.workspace.layoutReady) return;
 
-        const lazyOnViews = this.ctx.getSettings().lazyOnViews || {};
-        for (const [pluginId, viewTypes] of Object.entries(lazyOnViews)) {
-            if (viewTypes.includes(viewType)) {
-                const mode = this.ctx.getPluginMode(pluginId);
-                if (mode === "lazyOnView") {
-                    await this.pluginLoader.ensurePluginLoaded(pluginId);
-                }
-            }
+        const pluginId = resolvePluginForViewType(this.ctx, viewType);
+        if (pluginId) {
+            await this.pluginLoader.ensurePluginLoaded(pluginId);
         }
-    }
-
-    private getPluginIdForViewType(viewType: string): string | null {
-        const lazyOnViews = this.ctx.getSettings().lazyOnViews || {};
-        for (const [pluginId, viewTypes] of Object.entries(lazyOnViews)) {
-            if (viewTypes.includes(viewType)) {
-                return pluginId;
-            }
-        }
-        return null;
     }
 }

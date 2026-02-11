@@ -3,6 +3,7 @@ import {
     App,
     ButtonComponent,
     DropdownComponent,
+    ExtraButtonComponent,
     Notice,
     PluginSettingTab,
     Setting,
@@ -13,6 +14,7 @@ import {
     PluginModes,
     PluginSettings,
 } from "../../core/types";
+import { LazyOptionsModal } from "./lazy-options-modal";
 
 const logger = log.getLogger("OnDemandPlugin/SettingsTab");
 
@@ -226,25 +228,37 @@ export class SettingsTab extends PluginSettingTab {
                 return;
 
             count++;
-            const setting = new Setting(this.pluginListContainer)
-                .setName(plugin.name)
-                .addDropdown((dropdown) => {
-                    this.dropdowns.push(dropdown);
-                    this.addModeOptions(dropdown);
-                    dropdown
-                        .setValue(currentValue)
-                        .onChange((value: PluginMode) => {
-                            // Update the config, and defer apply until user confirms
-                            this.pluginSettings[plugin.id] = {
-                                mode: value,
-                                userConfigured: true,
-                            };
-                            this.ensurelazyOnViewEntry(plugin.id, value);
-                            this.pendingPluginIds.add(plugin.id);
-                            this.updateApplyButton();
-                            this.buildPluginList(); // Rebuild to show/hide view types input
-                        });
+            const setting = new Setting(this.pluginListContainer).setName(plugin.name);
+
+            // Add gear button first (will appear on the left)
+            const gearBtn = new ExtraButtonComponent(setting.controlEl)
+                .setIcon("gear")
+                .setTooltip("Advanced lazy options")
+                .onClick(() => {
+                    new LazyOptionsModal(this.app, this.plugin, plugin.id).open();
                 });
+
+            // Only show for lazy modes
+            const isLazy = currentValue === "lazy" || currentValue === "lazyOnView";
+            gearBtn.extraSettingsEl.style.display = isLazy ? "inline-block" : "none";
+            gearBtn.extraSettingsEl.addClass("lazy-plugin-gear-left");
+
+            // Then add dropdown (will appear to the right of gear)
+            setting.addDropdown((dropdown) => {
+                this.dropdowns.push(dropdown);
+                this.addModeOptions(dropdown);
+                dropdown.setValue(currentValue).onChange((value: PluginMode) => {
+                    // Update the config, and defer apply until user confirms
+                    this.pluginSettings[plugin.id] = {
+                        mode: value,
+                        userConfigured: true,
+                    };
+                    this.ensurelazyOnViewEntry(plugin.id, value);
+                    this.pendingPluginIds.add(plugin.id);
+                    this.updateApplyButton();
+                    this.buildPluginList(); // Rebuild to show/hide view types input
+                });
+            });
 
             setting.then((setting) => {
                 if (this.plugin.settings.showDescriptions) {
@@ -263,7 +277,7 @@ export class SettingsTab extends PluginSettingTab {
         if (!this.plugin.settings.lazyOnViews) {
             this.plugin.settings.lazyOnViews = {};
         }
-        if (mode === "lazyOnView") {
+        if (mode === "lazy" || mode === "lazyOnView") {
             if (!this.plugin.settings.lazyOnViews[pluginId]) {
                 this.plugin.settings.lazyOnViews[pluginId] = [];
             }
@@ -283,7 +297,7 @@ export class SettingsTab extends PluginSettingTab {
         const lazyOnViews = this.plugin.settings.lazyOnViews;
         this.plugin.manifests.forEach((plugin) => {
             const mode = this.plugin.getPluginMode(plugin.id);
-            if (mode === "lazyOnView") {
+            if (mode === "lazy" || mode === "lazyOnView") {
                 if (!lazyOnViews[plugin.id]) {
                     lazyOnViews[plugin.id] = [];
                 }

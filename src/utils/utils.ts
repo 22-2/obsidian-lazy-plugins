@@ -33,10 +33,16 @@ export function checkViewIsGone(leaf: WorkspaceLeaf): boolean {
 }
 
 export function isPluginLoaded(
-    plugins: PluginsMap | undefined,
+    app: any,
     pluginId: string,
 ): boolean {
-    return Boolean(plugins?.[pluginId]?._loaded);
+    const plugins = app.plugins;
+    if (!plugins) return false;
+    
+    const isEnabled = plugins.enabledPlugins?.has(pluginId);
+    const isLoaded = Boolean(plugins.plugins?.[pluginId]?._loaded);
+    
+    return Boolean(isEnabled && isLoaded);
 }
 
 export type PluginsMap = Record<string, { _loaded?: boolean }>;

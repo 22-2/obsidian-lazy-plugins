@@ -1,12 +1,16 @@
 import { TFile, WorkspaceLeaf } from "obsidian";
 import { PluginContext } from "../../core/plugin-context";
 import { PluginLoader } from "../../core/interfaces";
-import { rebuildLeafView } from "../../utils/utils";
+import { rebuildLeafView, isPluginLoaded, PluginsMap } from "../../utils/utils";
+import { resolvePluginForFile } from "./activation-rules";
 import log from "loglevel";
 
 const logger = log.getLogger("OnDemandPlugin/FileLazyLoader");
 
 export class FileLazyLoader {
+    /** Guard against re-entrant calls caused by rebuildLeafView firing file-open */
+    private processing = new WeakSet<WorkspaceLeaf>();
+
     constructor(
         private ctx: PluginContext,
         private pluginLoader: PluginLoader & { ensurePluginLoaded(pluginId: string): Promise<boolean> },
@@ -43,77 +47,43 @@ export class FileLazyLoader {
         });
     }
 
-    async checkFileForLazyLoading(file: TFile, leaf: WorkspaceLeaf): Promise<void> {
-        const settings = this.ctx.getSettings();
-        const lazyOnFiles = settings.lazyOnFiles || {};
+    private async checkFileForLazyLoading(file: TFile, leaf: WorkspaceLeaf): Promise<void> {
+        const leafId = (leaf as any).id || 'unknown';
+        logger.debug(`[LazyPlugins] checkFileForLazyLoading: started for ${file.path} in leaf ${leafId}`);
 
-        // Merge defaults if necessary (e.g. Excalidraw)
-        const allRules = { ...this.getDefaultRules(), ...lazyOnFiles };
-
-        for (const [pluginId, criteria] of Object.entries(allRules)) {
-            const mode = this.ctx.getPluginMode(pluginId);
-            if (mode !== "lazyOnView") continue;
-
-            if (await this.matchesCriteria(file, criteria)) {
-                const loaded = await this.pluginLoader.ensurePluginLoaded(pluginId);
-                if (loaded && leaf) {
-                    try {
-                        // After plugin load, we typically need to rebuild the view
-                        // so the plugin can take over the leaf with its specialized view.
-                        await rebuildLeafView(leaf);
-                    } catch (e) {
-                        logger.debug(`FileLazyLoader: error rebuilding view for plugin ${pluginId}`, e);
-                    }
-                }
-                break; // Stop at first matching plugin
-            }
-        }
-    }
-
-    private getDefaultRules(): Record<string, import("../../core/types").FileActivationCriteria> {
-        return {
-            "obsidian-excalidraw-plugin": {
-                extensions: ["excalidraw"],
-                frontmatterKeys: ["excalidraw-plugin"],
-            },
-        };
-    }
-
-    private async matchesCriteria(file: TFile, criteria: import("../../core/types").FileActivationCriteria): Promise<boolean> {
-        const { app } = this.ctx;
-
-        // 1. Extension check
-        if (criteria.extensions?.includes(file.extension)) {
-            return true;
+        // Re-entry guard
+        if (this.processing.has(leaf)) {
+            logger.debug(`[LazyPlugins] checkFileForLazyLoading: skipped (processing) for leaf ${leafId}`);
+            return;
         }
 
-        // 2. Frontmatter check
-        if (criteria.frontmatterKeys?.length) {
-            const cache = app.metadataCache.getFileCache(file);
-            if (cache?.frontmatter) {
-                for (const key of criteria.frontmatterKeys) {
-                    if (Object.prototype.hasOwnProperty.call(cache.frontmatter, key)) {
-                        return true;
-                    }
+        const pluginId = await resolvePluginForFile(this.ctx, file);
+        if (!pluginId) {
+            logger.debug(`[LazyPlugins] checkFileForLazyLoading: no plugin resolved for ${file.path}`);
+            return;
+        }
+
+        // Skip if plugin is already loaded — nothing to do
+        const wasLoaded = isPluginLoaded(this.ctx.app, pluginId);
+        
+        logger.debug(`[LazyPlugins] checkFileForLazyLoading: target plugin: ${pluginId}, wasLoaded: ${wasLoaded}`);
+        if (wasLoaded) return;
+
+        this.processing.add(leaf);
+        try {
+            const loaded = await this.pluginLoader.ensurePluginLoaded(pluginId);
+            logger.debug(`[LazyPlugins] checkFileForLazyLoading: ensurePluginLoaded result: ${loaded}`);
+            if (loaded) {
+                logger.debug(`[LazyPlugins] checkFileForLazyLoading: triggering rebuildLeafView for leaf ${leafId}`);
+                try {
+                    await rebuildLeafView(leaf);
+                    logger.debug(`[LazyPlugins] checkFileForLazyLoading: rebuildLeafView completed for leaf ${leafId}`);
+                } catch (e) {
+                    logger.debug(`[LazyPlugins] FileLazyLoader: error rebuilding view for ${pluginId}`, e);
                 }
             }
+        } finally {
+            this.processing.delete(leaf);
         }
-
-        // 3. Content Pattern check (Regex)
-        if (criteria.contentPatterns?.length) {
-            try {
-                const content = await app.vault.cachedRead(file);
-                for (const pattern of criteria.contentPatterns) {
-                    const regex = new RegExp(pattern);
-                    if (regex.test(content)) {
-                        return true;
-                    }
-                }
-            } catch (e) {
-                logger.debug(`FileLazyLoader: error reading file content for pattern match: ${file.path}`, e);
-            }
-        }
-
-        return false;
     }
 }

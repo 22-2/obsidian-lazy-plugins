@@ -3,13 +3,21 @@
  * These types are used across multiple features/services.
  */
 
+export interface LazyOptions {
+    useView: boolean;
+    viewTypes: string[];
+    useFile: boolean;
+    fileCriteria: FileActivationCriteria;
+}
+
 export interface PluginSettings {
     mode?: PluginMode;
     userConfigured?: boolean;
+    lazyOptions?: LazyOptions;
 }
 
 export interface FileActivationCriteria {
-    extensions?: string[];
+    suffixes?: string[];
     frontmatterKeys?: string[];
     contentPatterns?: string[];
 }
@@ -63,7 +71,7 @@ export type PluginMode = "disabled" | "lazy" | "keepEnabled" | "lazyOnView";
 
 export const PluginModes: Record<PluginMode, string> = {
     disabled: "⛔ Always disabled",
-    lazy: "Lazy on command",
-    lazyOnView: "Lazy on command/view",
+    lazy: "Lazy on command/option",
+    lazyOnView: "Lazy on command/view (Legacy)",
     keepEnabled: "✅ Always enabled",
 };
