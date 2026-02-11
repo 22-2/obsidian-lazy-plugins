@@ -1,9 +1,9 @@
 import log from "loglevel";
 import { WorkspaceLeaf } from "obsidian";
-import { PluginContext } from "../../core/plugin-context";
 import { PluginLoader } from "../../core/interfaces";
+import { PluginContext } from "../../core/plugin-context";
 import { isPluginLoaded, rebuildLeafView } from "../../utils/utils";
-import { LockRelease, LockStrategy } from "./leaf-lock";
+import { LockStrategy } from "./leaf-lock";
 
 const logger = log.getLogger("OnDemandPlugin/BaseLazyLoader");
 

@@ -87,13 +87,4 @@ export class LeafLockStrategy implements LockStrategy<WorkspaceLeaf> {
     }
 }
 
-/**
- * No-op lock strategy for testing purposes.
- * Does not perform any actual locking.
- */
-export class NoOpLockStrategy<T> implements LockStrategy<T> {
-    async lock(_target: T): Promise<LockRelease> {
-        return { unlock: () => {} };
-    }
-}
 
