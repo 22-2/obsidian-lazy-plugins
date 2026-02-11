@@ -258,7 +258,7 @@ export class StartupPolicyService {
         100,
     );
 
-    private async executeStartupPolicy(pluginIds?: string[]) {
+    private async executeStartupPolicy(pluginIds?: string[], externalProgress?: ProgressDialog | null) {
         const manifests = this.ctx.getManifests();
         const targetPluginIds = pluginIds?.length ? new Set(pluginIds) : null;
         const targetManifests = this.getTargetManifests(
@@ -268,9 +268,18 @@ export class StartupPolicyService {
         const lazyManifests = this.getLazyManifests(targetManifests);
 
         let cancelled = false;
-        const progress = this.createProgressDialog(lazyManifests.length, () => {
+        // Use an externally supplied progress dialog when provided, otherwise create one.
+        const progress = externalProgress ?? this.createProgressDialog(lazyManifests.length, () => {
             cancelled = true;
         });
+
+        if (externalProgress) {
+            // Ensure cancel from external dialog sets our cancelled flag and totals align.
+            externalProgress.setOnCancel(() => {
+                cancelled = true;
+            });
+            externalProgress.setTotal(lazyManifests.length + 2);
+        }
 
         const lazyOnViews: Record<string, string[]> = {
             ...(this.ctx.getSettings().lazyOnViews ?? {}),
@@ -292,6 +301,16 @@ export class StartupPolicyService {
                 progress,
             );
         }
+    }
+
+    /**
+     * Apply startup policy but reuse an externally created ProgressDialog (optional).
+     * This allows callers to show a unified progress UI covering command cache rebuild + apply.
+     */
+    public async applyWithProgress(progress: ProgressDialog | null, pluginIds?: string[]) {
+        await this.mutex.runExclusive(async () => {
+            await this.executeStartupPolicy(pluginIds, progress);
+        });
     }
 
     private getTargetManifests(

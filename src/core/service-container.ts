@@ -6,6 +6,7 @@
  * wiring that was previously spread across main.ts.
  */
 import { PluginManifest, WorkspaceLeaf } from "obsidian";
+import { ProgressDialog } from "../utils/progress";
 import { PluginContext } from "./plugin-context";
 import { CommandCacheService } from "../features/command-cache/command-cache-service";
 import { LazyCommandRunner } from "../features/lazy-runner/lazy-command-runner";
@@ -111,8 +112,31 @@ export class ServiceContainer {
      */
     async rebuildAndApplyCommandCache(options?: { force?: boolean }) {
         const force = options?.force ?? false;
-        await this.commandCache.refreshCommandCache(undefined, force);
-        await this.startupPolicy.apply();
+        // Show a progress dialog early to cover the command cache rebuild and the
+        // subsequent startup policy apply steps.
+        const manifests = this.ctx.getManifests();
+        const lazyCount = manifests.filter((p) => {
+            const mode = this.ctx.getPluginMode(p.id);
+            return mode === "lazy" || mode === "lazyOnView";
+        }).length;
+
+        const progress = new ProgressDialog(this.ctx.app, {
+            title: "Rebuilding command cache",
+            total: Math.max(1, lazyCount) + 2,
+            cancellable: true,
+            cancelText: "Cancel",
+            onCancel: () => {},
+        });
+        progress.open();
+
+        await this.commandCache.refreshCommandCache(undefined, force, (current, total, plugin) => {
+            progress.setStatus(`Rebuilding ${plugin.name}`);
+            progress.setProgress(current, total);
+        });
+
+        // Reuse the same progress dialog for the startup policy apply step so
+        // the user sees a continuous progress experience.
+        await this.startupPolicy.applyWithProgress(progress);
         this.commandCache.registerCachedCommands();
     }
 
