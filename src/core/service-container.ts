@@ -6,8 +6,8 @@
  * wiring that was previously spread across main.ts.
  */
 import { PluginManifest, WorkspaceLeaf } from "obsidian";
-import { ProgressDialog } from "../utils/progress";
-import { isLazyMode } from "../utils/utils";
+import { ProgressDialog } from "./progress";
+import { isLazyMode } from "./utils";
 import { PluginContext } from "./plugin-context";
 import { CommandCacheService } from "../features/command-cache/command-cache-service";
 import { LazyCommandRunner } from "../features/lazy-runner/lazy-command-runner";

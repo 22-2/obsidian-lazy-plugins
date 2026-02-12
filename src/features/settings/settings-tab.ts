@@ -15,7 +15,7 @@ import {
     PluginSettings,
 } from "../../core/types";
 import { LazyOptionsModal } from "./lazy-options-modal";
-import { isLazyMode } from "../../utils/utils";
+import { isLazyMode } from "../../core/utils";
 
 const logger = log.getLogger("OnDemandPlugin/SettingsTab");
 

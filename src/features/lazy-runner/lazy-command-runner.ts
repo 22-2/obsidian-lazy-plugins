@@ -7,7 +7,7 @@ import pTimeout from "p-timeout";
 import { ViewRegistry } from "obsidian-typings";
 import { PluginContext } from "../../core/plugin-context";
 import { CommandRegistry, PluginLoader } from "../../core/interfaces";
-import { isPluginLoaded, isPluginEnabled } from "../../utils/utils";
+import { isPluginLoaded, isPluginEnabled } from "../../core/utils";
 
 const logger = log.getLogger("OnDemandPlugin/LazyCommandRunner");
 

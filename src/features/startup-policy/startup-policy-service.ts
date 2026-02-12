@@ -1,9 +1,9 @@
 import { App, PluginManifest, debounce } from "obsidian";
 import { saveJSON } from "../../core/storage";
 import log from "loglevel";
-import { ProgressDialog } from "../../utils/progress";
-import { ON_DEMAND_PLUGIN_ID } from "../../utils/constants";
-import { isPluginLoaded, isPluginEnabled, isLazyMode } from "../../utils/utils";
+import { ProgressDialog } from "../../core/progress";
+import { ON_DEMAND_PLUGIN_ID } from "../../core/constants";
+import { isPluginLoaded, isPluginEnabled, isLazyMode } from "../../core/utils";
 import { PluginMode } from "../../core/types";
 import { Commands, Plugins } from "obsidian-typings";
 import { Mutex } from "async-mutex";

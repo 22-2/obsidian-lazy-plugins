@@ -2,7 +2,7 @@ import { around } from "monkey-around";
 import { Plugins } from "obsidian-typings";
 import { PluginContext } from "../core/plugin-context";
 import { CommandCacheService } from "../features/command-cache/command-cache-service";
-import { isLazyMode } from "../utils/utils";
+import { isLazyMode } from "../core/utils";
 
 export function patchPluginEnableDisable(
     ctx: PluginContext,

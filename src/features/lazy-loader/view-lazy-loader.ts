@@ -1,7 +1,7 @@
 import { WorkspaceLeaf, debounce } from "obsidian";
 import { PluginContext } from "../../core/plugin-context";
 import { CommandRegistry, PluginLoader } from "../../core/interfaces";
-import { isLeafVisible } from "../../utils/utils";
+import { isLeafVisible } from "../../core/utils";
 import { LeafResource, LockStrategy } from "./helpers/leaf-lock";
 import { resolvePluginForViewType } from "./helpers/activation-rules";
 import { BaseLazyLoader } from "./base-lazy-loader";
