@@ -6,6 +6,7 @@
  * wiring that was previously spread across main.ts.
  */
 import { PluginManifest, WorkspaceLeaf } from "obsidian";
+import PQueue from "p-queue";
 import { ProgressDialog } from "./progress";
 import { isLazyMode } from "./utils";
 import { PluginContext } from "./plugin-context";
@@ -31,6 +32,7 @@ export class ServiceContainer {
     readonly startupPolicy: StartupPolicyService;
     readonly viewLoader: ViewLazyLoader;
     readonly fileLoader: FileLazyLoader;
+    private layoutReadyQueue: PQueue;
 
     constructor(private ctx: PluginContext) {
         // 1. Registry (no service deps)
@@ -81,6 +83,9 @@ export class ServiceContainer {
                     lockManager.lock(leaf, "leaf-generic"),
             },
         );
+
+        // Queue used to limit concurrency when loading plugins on layout ready
+        this.layoutReadyQueue = new PQueue({ concurrency: 3, interval: 100 });
     }
 
     /**
@@ -115,16 +120,31 @@ export class ServiceContainer {
     }
 
     private registerLayoutReadyLoader() {
-        this.ctx.app.workspace.onLayoutReady(async () => {
-            const manifests = this.ctx.getManifests();
-            for (const manifest of manifests) {
-                if (
-                    this.ctx.getPluginMode(manifest.id) === "lazyOnLayoutReady"
-                ) {
-                    await this.lazyRunner.ensurePluginLoaded(manifest.id);
-                }
-            }
-        });
+        this.ctx.app.workspace.onLayoutReady(this.onLayoutReady.bind(this));
+    }
+
+    private async onLayoutReady() {
+        const manifests = this.ctx.getManifests();
+
+        const toLoad = manifests.filter(
+            (m) => this.ctx.getPluginMode(m.id) === "lazyOnLayoutReady",
+        );
+
+        if (toLoad.length === 0) return;
+
+        const tasks = toLoad.map((manifest) =>
+            this.layoutReadyQueue.add(() =>
+                this.lazyRunner.ensurePluginLoaded(manifest.id).catch((err) =>
+                    console.error(
+                        "Failed loading plugin onLayoutReady",
+                        manifest.id,
+                        err,
+                    ),
+                ),
+            ),
+        );
+
+        await Promise.all(tasks);
     }
 
     /**
@@ -226,5 +246,6 @@ export class ServiceContainer {
         this.commandCache?.clear();
         this.lazyRunner?.clear();
         this.registry?.clear();
+        this.layoutReadyQueue?.clear();
     }
 }

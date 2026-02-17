@@ -29,6 +29,7 @@
 		"monkey-around": "^3.0.0",
 		"obsidian-typings": "^4.99.0",
 		"p-event": "^7.1.0",
+		"p-queue": "^9.1.0",
 		"p-timeout": "^7.0.1",
 		"p-wait-for": "^6.0.0",
 		"store2": "^2.14.4"
