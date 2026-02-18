@@ -13,8 +13,7 @@
 		"build:nocheck": "node esbuild.config.mjs production",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
 		"lint": "pnpm exec eslint ./src --ext .ts,.js,.mjs",
-		"fix": "pnpm run lint --fix",
-		"format": "pnpm exec prettier --editorconfig --write ./src"
+		"format": "pnpm run lint --fix && pnpm exec prettier --editorconfig --write ./src && pnpx organize-imports-cli tsconfig.json"
 	},
 	"keywords": [],
 	"author": "22-2",
