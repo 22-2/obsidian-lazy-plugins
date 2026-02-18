@@ -12,6 +12,7 @@
 		"build": "tsc -noEmit -skipLibCheck && pnpm run build:nocheck",
 		"build:nocheck": "node esbuild.config.mjs production",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
+		"lint": "pnpm exec eslint . --ext .ts,.js,.mjs",
 		"format": "pnpm exec prettier --editorconfig --write src"
 	},
 	"keywords": [],
@@ -41,6 +42,7 @@
 		"builtin-modules": "5.0.0",
 		"esbuild": "0.27.3",
 		"eslint": "^10.0.0",
+		"eslint-config-prettier": "^10.1.8",
 		"globals": "^17.3.0",
 		"obsidian": "latest",
 		"obsidian-e2e-toolkit": "github:22-2/obsidian-e2e-toolkit#0.1.61",
