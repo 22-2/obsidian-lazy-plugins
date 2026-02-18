@@ -1,4 +1,4 @@
-import { App, Modal, Setting, TextComponent, ButtonComponent, Notice } from "obsidian";
+import { App, Modal, Setting, ButtonComponent, Notice, ExtraButtonComponent, Menu } from "obsidian";
 import type { SettingsService } from "./settings-service";
 import { showConfirmModal } from "src/core/showConfirmModal";
 
@@ -40,8 +40,8 @@ export class ProfileManagerModal extends Modal {
             
             const tags = [];
             if (isCurrent) tags.push("Active");
-            if (isDesktopDefault) tags.push("Desktop Default");
-            if (isMobileDefault) tags.push("Mobile Default");
+            if (isDesktopDefault) tags.push("Desktop default");
+            if (isMobileDefault) tags.push("Mobile default");
             
             if (tags.length > 0) {
                 metaEl.textContent = tags.join(" • ");
@@ -50,67 +50,83 @@ export class ProfileManagerModal extends Modal {
             // Actions
             const actionsDiv = row.createEl("div", { cls: "lazy-profile-actions" });
 
-            // Rename
-            new ButtonComponent(actionsDiv)
-                .setIcon("pencil")
-                .setTooltip("Rename")
-                .onClick(() => {
-                    this.openRenameModal(id, profile.name);
+            const btn = new ExtraButtonComponent(actionsDiv)
+                .setIcon("ellipsis-vertical")
+                .setTooltip("More options");
+                
+            btn.extraSettingsEl.onClickEvent((evt: MouseEvent) => {
+                    const menu = new Menu();
+
+                    menu.addItem((item) =>
+                        item
+                            .setTitle("Rename")
+                            .setIcon("pencil")
+                            .onClick(() => this.openRenameModal(id, profile.name))
+                    );
+
+                    menu.addItem((item) =>
+                        item
+                            .setTitle("Duplicate")
+                            .setIcon("copy")
+                            .onClick(async () => {
+                                this.settingsService.createProfile(`${profile.name} (Copy)`, id);
+                                await this.settingsService.save();
+                                this.onProfileChanged();
+                                this.onOpen();
+                            })
+                    );
+
+                    menu.addSeparator();
+
+                    menu.addItem((item) =>
+                        item
+                            .setTitle("Set as Desktop default")
+                            .setIcon("monitor")
+                            .setChecked(isDesktopDefault)
+                            .setDisabled(isDesktopDefault)
+                            .onClick(async () => {
+                                this.settingsService.setDeviceDefault(id, "desktop");
+                                await this.settingsService.save();
+                                this.onOpen();
+                            })
+                    );
+
+                    menu.addItem((item) =>
+                        item
+                            .setTitle("Set as Mobile default")
+                            .setIcon("smartphone")
+                            .setChecked(isMobileDefault)
+                            .setDisabled(isMobileDefault)
+                            .onClick(async () => {
+                                this.settingsService.setDeviceDefault(id, "mobile");
+                                await this.settingsService.save();
+                                this.onOpen();
+                            })
+                    );
+
+                    if (profileIds.length > 1 && !isCurrent) {
+                        menu.addSeparator();
+                        menu.addItem((item) =>
+                            item
+                                .setTitle("Delete")
+                                .setIcon("trash")
+                                .onClick(async () => {
+                                    if (isDesktopDefault || isMobileDefault) {
+                                        new Notice("Cannot delete a default profile. Assign another default first.");
+                                        return;
+                                    }
+                                    if (await showConfirmModal(this.app, { message: `Are you sure you want to delete profile "${profile.name}"?` })) {
+                                        this.settingsService.deleteProfile(id);
+                                        await this.settingsService.save();
+                                        this.onProfileChanged();
+                                        this.onOpen();
+                                    }
+                                })
+                        );
+                    }
+
+                    menu.showAtMouseEvent(evt);
                 });
-
-            // Duplicate
-            new ButtonComponent(actionsDiv)
-                .setIcon("copy")
-                .setTooltip("Duplicate")
-                .onClick(async () => {
-                    this.settingsService.createProfile(`${profile.name} (Copy)`, id);
-                    await this.settingsService.save();
-                    this.onProfileChanged();
-                    this.onOpen(); // Refresh
-                });
-
-            // Defaults Settings (Only if not already default)
-            if (!isDesktopDefault) {
-                new ButtonComponent(actionsDiv)
-                    .setIcon("monitor")
-                    .setTooltip("Set as Desktop Default")
-                    .onClick(async () => {
-                        this.settingsService.setDeviceDefault(id, "desktop");
-                        await this.settingsService.save();
-                        this.onOpen();
-                    });
-            }
-
-            if (!isMobileDefault) {
-               new ButtonComponent(actionsDiv)
-                    .setIcon("smartphone")
-                    .setTooltip("Set as Mobile Default")
-                    .onClick(async () => {
-                        this.settingsService.setDeviceDefault(id, "mobile");
-                        await this.settingsService.save();
-                        this.onOpen();
-                    });
-            }
-
-            // Delete
-            if (profileIds.length > 1 && !isCurrent) {
-                new ButtonComponent(actionsDiv)
-                    .setIcon("trash")
-                    .setTooltip("Delete")
-                    .setWarning()
-                    .onClick(async () => {
-                         if (isDesktopDefault || isMobileDefault) {
-                             new Notice("Cannot delete a default profile. Assign another default first.");
-                             return;
-                         }
-                         if (await showConfirmModal(this.app, { message: `Are you sure you want to delete profile "${profile.name}"?` })) {
-                             this.settingsService.deleteProfile(id);
-                             await this.settingsService.save();
-                             this.onProfileChanged();
-                             this.onOpen();
-                         }
-                    });
-            }
         });
 
         // Add new Profile
