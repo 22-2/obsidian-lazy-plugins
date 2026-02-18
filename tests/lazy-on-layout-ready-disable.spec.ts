@@ -42,7 +42,7 @@ test("disabling a lazyOnLayoutReady plugin should not re-enable it", async ({ ob
     expect(await obsidian.isPluginEnabled(targetPluginId)).toBe(true);
 
     // 3. User manually disables the plugin
-    await obsidian.page.evaluate((id) => app.plugins.disablePlugin(id), targetPluginId);
+    await obsidian.page.evaluate((id) => app.plugins.disablePluginAndSave(id), targetPluginId);
 
     // Wait for disable to complete
     const disableDeadline = Date.now() + 8000;
