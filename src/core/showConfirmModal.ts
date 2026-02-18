@@ -1,28 +1,27 @@
 import { App, Modal } from "obsidian";
 
 /**
- * 確認モーダルを表示し、ユーザーの選択結果を返却します。
+ * Show a confirmation modal and return the user's choice.
  *
- * - 「はい」が選択された場合は true
- * - 「キャンセル」が選択された場合は false
- * - 明示的な操作なしに閉じられた場合は null
+ * - Returns `true` when the user selects "Yes"
+ * - Returns `false` when the user selects "Cancel"
+ * - Returns `null` when the modal was closed without an explicit choice
  *
+ * Example:
  * ```ts
- * const result = await showConfirmModal({ message: "この操作を実行しますか？" });
+ * const result = await showConfirmModal(app, { message: "Proceed with this action?" });
  * if (result === true) {
- *     // はいが押された
+ *   // User confirmed
  * }
  * ```
  */
-export async function showConfirmModal(app: App, args: {
-	message: string;
-}): Promise<boolean | null> {
+export async function showConfirmModal(app: App, args: { message: string }): Promise<boolean | null> {
 	return new ConfirmModal(app, args.message).open();
 }
 
 export class ConfirmModal extends Modal {
 	submitted = false;
-	// Promiseを解決するための関数
+	// Resolver for the returned Promise
 	resolve!: (value: boolean | null) => void;
 
 	constructor(app: App, public message: string) {
@@ -30,18 +29,18 @@ export class ConfirmModal extends Modal {
 	}
 
 	onOpen(): void {
-		this.titleEl.setText("確認");
+		this.titleEl.setText("Confirm");
 
-		// メッセージ表示
+		// Message
 		this.contentEl.createEl("p", { text: this.message });
 
-		// ボタンコンテナ
+		// Button container
 		const buttonContainer = this.contentEl.createDiv("modal-button-container");
 
-		// --- はい/OKボタン ---
+		// --- Yes / OK button ---
 		const confirmButton = buttonContainer.createEl("button", {
-			text: "はい",
-			cls: "mod-cta", // メインの行動を目立たせるスタイル
+			text: "Yes",
+			cls: "mod-cta",
 		});
 
 		const handleConfirm = () => {
@@ -52,12 +51,12 @@ export class ConfirmModal extends Modal {
 
 		confirmButton.onClickEvent(handleConfirm);
 
-		// Enterキーで「はい」をデフォルトにする
+		// Make Enter key trigger "Yes"
 		this.scope.register(null, "Enter", handleConfirm);
 
-		// --- キャンセルボタン ---
+		// --- Cancel button ---
 		const cancelButton = buttonContainer.createEl("button", {
-			text: "キャンセル",
+			text: "Cancel",
 		});
 		cancelButton.onClickEvent(() => {
 			this.resolve(false);
@@ -67,8 +66,8 @@ export class ConfirmModal extends Modal {
 	}
 
 	/**
-	 * モーダルが閉じられたときに呼び出されます。
-	 * submitted フラグが立っていなければ、ESCなどで閉じられたとみなし null を返します。
+	 * Called when the modal is closed. If no explicit choice was made
+	 * (submitted is false), resolve the promise with `null`.
 	 */
 	onClose(): void {
 		super.onClose();
@@ -78,7 +77,7 @@ export class ConfirmModal extends Modal {
 	}
 
 	/**
-	 * ダイアログを開き、Promiseを返却します。
+	 * Open the dialog and return a Promise that resolves with the user's choice.
 	 */
 	open(): Promise<boolean | null> {
 		super.open();
