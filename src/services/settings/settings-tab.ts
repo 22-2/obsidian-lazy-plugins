@@ -137,23 +137,6 @@ export class SettingsTab extends PluginSettingTab {
             .setHeading();
 
         new Setting(this.containerEl)
-            .setName("Re-register lazy commands/views wrapper on disable")
-            .setDesc(
-                "When a lazy plugin is manually disabled, re-register its cached command wrappers so the commands remain available. Applies to both 'Lazy on command' and 'Lazy on view' modes.",
-            )
-            .addToggle((toggle) => {
-                toggle
-                    .setValue(
-                        this.plugin.settings.reRegisterLazyCommandsOnDisable,
-                    )
-                    .onChange((value) => {
-                        this.plugin.settings.reRegisterLazyCommandsOnDisable =
-                            value;
-                        void this.plugin.saveSettings();
-                    });
-            });
-
-        new Setting(this.containerEl)
             .setName("Force rebuild command cache")
             .setDesc("Force a rebuild of the cached commands for lazy plugins.")
             .addButton((button) => {
