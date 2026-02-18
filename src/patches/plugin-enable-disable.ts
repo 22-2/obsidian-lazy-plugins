@@ -2,7 +2,7 @@ import { around } from "monkey-around";
 import type { Plugins } from "obsidian-typings";
 import type { PluginContext } from "../core/plugin-context";
 import type { CommandCacheService } from "../services/command-cache/command-cache-service";
-import { PLUGIN_MODE } from "../core/types";
+import { PLUGIN_MODE, PluginMode } from "../core/types";
 import log from "loglevel";
 
 const logger = log.getLogger("OnDemandPlugin/Patches/PluginEnableDisable");
@@ -30,62 +30,48 @@ export function patchPluginEnableDisable(
             enablePlugin: (next) =>
                 async function (this: Plugins, pluginId: string) {
                     const result = await next.call(this, pluginId);
-
-                    const mode = ctx.getPluginMode(pluginId);
-                    const data = ctx.getData();
-
-                    logger.debug(
-                        `[LazyPlugins] enablePlugin patch: id=${pluginId}, mode=${mode}`,
-                    );
-
-                    // Sync settings: alwaysDisabled → alwaysEnabled
-                    if (mode === PLUGIN_MODE.ALWAYS_DISABLED) {
-                        const settings = ctx.getSettings();
-                        settings.plugins[pluginId] = {
-                            mode: PLUGIN_MODE.ALWAYS_ENABLED,
-                            userConfigured: true,
-                        };
-                        await ctx.saveSettings();
-
-                        logger.debug(
-                            `[LazyPlugins] Synced settings: ${pluginId} disabled → keepEnabled`,
-                        );
-                    }
-
+                    await syncModeOnEnable(ctx, pluginId);
                     commandCacheService.syncCommandWrappersForPlugin(pluginId);
                     return result;
                 },
             disablePlugin: (next) =>
                 async function (this: Plugins, pluginId: string) {
                     const result = await next.call(this, pluginId);
-
-                    const mode = ctx.getPluginMode(pluginId);
-                    // const data = ctx.getData();
-
-                    logger.debug(
-                        `[LazyPlugins] disablePlugin patch: id=${pluginId}, mode=${mode}`,
-                    );
-
-                    // Sync settings: alwaysEnabled → alwaysDisabled
-                    if (mode === PLUGIN_MODE.ALWAYS_ENABLED) {
-                        const settings = ctx.getSettings();
-                        settings.plugins[pluginId] = {
-                            mode: PLUGIN_MODE.ALWAYS_DISABLED,
-                            userConfigured: true,
-                        };
-                        await ctx.saveSettings();
-
-                        logger.debug(
-                            `[LazyPlugins] Synced settings: ${pluginId} alwaysEnabled → alwaysDisabled`,
-                        );
-                    }
-
-                    // For lazy modes: do nothing. The plugin was already in a
-                    // disabled state; the lazy config is preserved and will be
-                    // re-applied on next startup.
-
+                    await syncModeOnDisable(ctx, pluginId);
                     return result;
                 },
         }),
     );
+}
+
+// alwaysDisabled → alwaysEnabled
+async function syncModeOnEnable(ctx: PluginContext, pluginId: string): Promise<void> {
+    const mode = ctx.getPluginMode(pluginId);
+    logger.debug(`[LazyPlugins] enablePlugin patch: id=${pluginId}, mode=${mode}`);
+
+    if (mode !== PLUGIN_MODE.ALWAYS_DISABLED) return;
+
+    await updatePluginMode(ctx, pluginId, PLUGIN_MODE.ALWAYS_ENABLED);
+    logger.debug(`[LazyPlugins] Synced settings: ${pluginId} alwaysDisabled → alwaysEnabled`);
+}
+
+// alwaysEnabled → alwaysDisabled
+// Lazy modes are intentionally left untouched (see module-level comment).
+async function syncModeOnDisable(ctx: PluginContext, pluginId: string): Promise<void> {
+    const mode = ctx.getPluginMode(pluginId);
+    logger.debug(`[LazyPlugins] disablePlugin patch: id=${pluginId}, mode=${mode}`);
+
+    if (mode !== PLUGIN_MODE.ALWAYS_ENABLED) return;
+
+    await updatePluginMode(ctx, pluginId, PLUGIN_MODE.ALWAYS_DISABLED);
+    logger.debug(`[LazyPlugins] Synced settings: ${pluginId} alwaysEnabled → alwaysDisabled`);
+}
+
+async function updatePluginMode(
+    ctx: PluginContext,
+    pluginId: string,
+    mode: PluginMode,
+): Promise<void> {
+    ctx.getSettings().plugins[pluginId] = { mode, userConfigured: true };
+    await ctx.saveSettings();
 }
