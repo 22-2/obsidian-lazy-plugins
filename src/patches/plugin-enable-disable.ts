@@ -14,7 +14,10 @@ import { PluginMode } from "../core/types";
  * undoes the user's disable action.
  */
 function isCommandBasedLazyMode(mode: PluginMode | undefined): boolean {
-    if (!mode) return false;
+    // lazyOnLayoutReady is excluded because it loads plugins at layout ready time,
+    // not via command wrappers. Re-registering commands for it would trigger
+    // ensureCommandsCached → getCommandsForPlugin → enablePlugin.
+    if (!mode || mode === "lazyOnLayoutReady") return false;
     return mode === "lazy" || mode === "lazyOnView";
 }
 
