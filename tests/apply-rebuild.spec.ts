@@ -1,5 +1,7 @@
 import { expect, test } from "obsidian-e2e-toolkit";
 import { ensureBuilt, pluginUnderTestId, targetPluginId, useOnDemandPlugins } from "./test-utils";
+import OnDemandPlugin from "src/main";
+import { PLUGIN_MODE } from "src/core/types";
 
 useOnDemandPlugins();
 
@@ -9,14 +11,14 @@ test("apply changes updates startup policy", async ({ obsidian }) => {
     await obsidian.waitReady();
 
     const pluginHandle = await obsidian.plugin(pluginUnderTestId);
-    const result = await pluginHandle.evaluate(async (plugin, pluginId) => {
+    const result = await pluginHandle.evaluate(async (plugin: OnDemandPlugin, pluginId) => {
         const beforeUpdatedAt = plugin.data?.commandCacheUpdatedAt ?? null;
         const original = app.commands.executeCommandById;
         app.commands.executeCommandById = () => true;
 
         try {
-            await plugin.updatePluginSettings(pluginId, "lazy");
-            await plugin.applyStartupPolicy([pluginId]);
+            await plugin.updatePluginSettings(pluginId, PLUGIN_MODE.LAZY);
+            await plugin.applyStartupPolicyAndRestart([pluginId]);
         } finally {
             app.commands.executeCommandById = original;
         }
@@ -187,14 +189,14 @@ test("apply changes writes community-plugins.json", async ({ obsidian }) => {
     await obsidian.waitReady();
 
     const pluginHandle = await obsidian.plugin(pluginUnderTestId);
-    await pluginHandle.evaluate(async (plugin, pluginId) => {
+    await pluginHandle.evaluate(async (plugin: OnDemandPlugin, pluginId) => {
         const original = app.commands.executeCommandById;
         app.commands.executeCommandById = () => true; // prevent real reload
 
         try {
             // Make plugin keepEnabled so it should be present in the file
-            await plugin.updatePluginSettings(pluginId, "keepEnabled");
-            await plugin.applyStartupPolicy([pluginId]);
+            await plugin.updatePluginSettings(pluginId, PLUGIN_MODE.ALWAYS_ENABLED);
+            await plugin.applyStartupPolicyAndRestart([pluginId]);
         } finally {
             app.commands.executeCommandById = original;
         }
@@ -224,7 +226,7 @@ test("automatic view type detection during Apply changes", async ({ obsidian }) 
     await obsidian.waitReady();
 
     const pluginHandle = await obsidian.plugin(pluginUnderTestId);
-    const detected = await pluginHandle.evaluate(async (plugin, pluginId) => {
+    const detected = await pluginHandle.evaluate(async (plugin: OnDemandPlugin, pluginId) => {
         const original = app.commands.executeCommandById;
         app.commands.executeCommandById = () => true; // prevent reload
 
@@ -235,8 +237,8 @@ test("automatic view type detection during Apply changes", async ({ obsidian }) 
                 await plugin.saveSettings();
             }
 
-            await plugin.updatePluginSettings(pluginId, "lazyOnView");
-            await plugin.applyStartupPolicy([pluginId]);
+            await plugin.updatePluginSettings(pluginId, PLUGIN_MODE.LAZY_ON_VIEW);
+            await plugin.applyStartupPolicyAndRestart([pluginId]);
 
             return plugin.settings.lazyOnViews?.[pluginId] ?? null;
         } finally {
