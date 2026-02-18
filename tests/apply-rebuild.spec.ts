@@ -17,7 +17,7 @@ test("apply changes updates startup policy", async ({ obsidian }) => {
         app.commands.executeCommandById = () => true;
 
         try {
-            await plugin.updatePluginSettings(pluginId, PLUGIN_MODE.LAZY);
+            await plugin.updatePluginSettings(pluginId, "lazy");
             await plugin.applyStartupPolicyAndRestart([pluginId]);
         } finally {
             app.commands.executeCommandById = original;
@@ -195,7 +195,7 @@ test("apply changes writes community-plugins.json", async ({ obsidian }) => {
 
         try {
             // Make plugin keepEnabled so it should be present in the file
-            await plugin.updatePluginSettings(pluginId, PLUGIN_MODE.ALWAYS_ENABLED);
+            await plugin.updatePluginSettings(pluginId, "alwaysEnabled");
             await plugin.applyStartupPolicyAndRestart([pluginId]);
         } finally {
             app.commands.executeCommandById = original;
@@ -237,7 +237,7 @@ test("automatic view type detection during Apply changes", async ({ obsidian }) 
                 await plugin.saveSettings();
             }
 
-            await plugin.updatePluginSettings(pluginId, PLUGIN_MODE.LAZY_ON_VIEW);
+            await plugin.updatePluginSettings(pluginId, "lazyOnView");
             await plugin.applyStartupPolicyAndRestart([pluginId]);
 
             return plugin.settings.lazyOnViews?.[pluginId] ?? null;

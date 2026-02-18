@@ -17,7 +17,7 @@ test("apply changes writes community-plugins.json", async ({ obsidian }) => {
 
         try {
             // Make plugin keepEnabled so it should be present in the file
-            await plugin.updatePluginSettings(pluginId, PLUGIN_MODE.ALWAYS_ENABLED);
+            await plugin.updatePluginSettings(pluginId, "alwaysEnabled");
             await plugin.applyStartupPolicyAndRestart([pluginId]);
         } finally {
             app.commands.executeCommandById = original;
