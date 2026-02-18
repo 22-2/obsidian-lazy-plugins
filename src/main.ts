@@ -50,10 +50,6 @@ export default class OnDemandPlugin extends Plugin {
         await this.container.settingsService.save();
     }
 
-    async migrateSettings() {
-        await this.container.settingsService.migrate();
-    }
-
     // ─── Plugin configuration ──────────────────────────────────
 
     /**
