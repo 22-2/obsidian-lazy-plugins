@@ -58,7 +58,6 @@ export function isPluginEnabled(
 export function isLazyMode(mode: PluginMode): boolean {
     return (
         mode === PLUGIN_MODE.LAZY ||
-        mode === PLUGIN_MODE.LAZY_ON_VIEW ||
         mode === PLUGIN_MODE.LAZY_ON_LAYOUT_READY
     );
 }

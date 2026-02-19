@@ -94,6 +94,9 @@ export const PLUGIN_MODE = {
     ALWAYS_DISABLED: "alwaysDisabled",
     LAZY: "lazy",
     ALWAYS_ENABLED: "alwaysEnabled",
+    /** 
+     * @deprecated
+    */
     LAZY_ON_VIEW: "lazyOnView",
     LAZY_ON_LAYOUT_READY: "lazyOnLayoutReady",
 } as const;

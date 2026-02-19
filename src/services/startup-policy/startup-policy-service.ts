@@ -17,30 +17,80 @@ import type { PluginRegistry } from "../registry/plugin-registry";
 const logger = log.getLogger("OnDemandPlugin/StartupPolicyService");
 
 /**
- * Manage interception of the ViewRegistry
+ * Manages plugin startup policies and lifecycle.
+ * Handles lazy loading, view-based loading, and persistent plugin states
+ * with progress UI and cancellation support.
  */
-class ViewRegistryInterceptor {
-    private originalRegisterView:
-        | ((type: string, creator: unknown) => unknown)
-        | null = null;
+export class StartupPolicyService {
+    private mutex = new Mutex();
+    private originalRegisterView: ((type: string, creator: unknown) => unknown) | null = null;
 
     constructor(
-        private app: App,
-        private getPluginMode: (pluginId: string) => PluginMode,
+        private ctx: PluginContext,
+        private commandCacheService: CommandCacheService,
+        private registry: PluginRegistry,
     ) {}
 
+    /** Apply startup policy (debounced + serialized via mutex). */
+    public apply = debounce(async (pluginIds?: string[]) => {
+        await this.mutex.runExclusive(() => this.executeStartupPolicy(pluginIds));
+    }, 100);
+
+    /** Apply startup policy reusing an externally created ProgressDialog. */
+    public async applyWithProgress(progress: ProgressDialog | null, pluginIds?: string[]) {
+        await this.mutex.runExclusive(() => this.executeStartupPolicy(pluginIds, progress));
+    }
+
+    // -------------------------------------------------------------------------
+    // Core execution
+    // -------------------------------------------------------------------------
+
+    private async executeStartupPolicy(
+        pluginIds?: string[],
+        externalProgress?: ProgressDialog | null,
+    ) {
+        const targetIds = pluginIds?.length ? new Set(pluginIds) : null;
+        const allManifests = this.ctx.getManifests();
+        const targetManifests = targetIds
+            ? allManifests.filter((p) => targetIds.has(p.id))
+            : allManifests;
+        const lazyManifests = this.getLazyManifests(targetManifests);
+
+        let cancelled = false;
+        const progress = externalProgress
+            ? (externalProgress.setOnCancel(() => { cancelled = true; }),
+               externalProgress.setTotal(lazyManifests.length + 2),
+               externalProgress)
+            : this.openProgressDialog(lazyManifests.length, () => { cancelled = true; });
+
+        const lazyOnViews: Record<string, string[]> = {
+            ...(this.ctx.getSettings().lazyOnViews ?? {}),
+        };
+        const stopIntercepting = this.interceptViewRegistry(lazyOnViews);
+
+        try {
+            await this.loadLazyPluginsWithProgress(
+                lazyManifests,
+                targetIds,
+                progress,
+                () => cancelled,
+            );
+        } finally {
+            await this.cleanupAndReload(lazyOnViews, !cancelled, progress, stopIntercepting);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // View registry interception
+    // -------------------------------------------------------------------------
+
     /**
-     * Intercept ViewRegistry.registerView to record view registrations
-     * for lazyOnView plugins
+     * Monkey-patches ViewRegistry.registerView to capture which view types
+     * each lazy plugin registers. Returns a cleanup function.
      */
-    intercept(
-        lazyOnViews: Record<string, string[]>,
-        getPluginSettings: (pluginId: string) => { lazyOptions?: { useView?: boolean; viewTypes?: string[] } } | undefined,
-    ): () => void {
-        const { viewRegistry } = this.app as unknown as {
-            viewRegistry?: {
-                registerView?: (type: string, creator: unknown) => unknown;
-            };
+    private interceptViewRegistry(lazyOnViews: Record<string, string[]>): () => void {
+        const { viewRegistry } = this.ctx.app as unknown as {
+            viewRegistry?: { registerView?: (type: string, creator: unknown) => unknown };
         };
 
         this.originalRegisterView = viewRegistry?.registerView ?? null;
@@ -48,33 +98,27 @@ class ViewRegistryInterceptor {
             return () => {};
         }
 
-        viewRegistry.registerView = (type: string, creator: unknown) => {
-            const loadingPluginId = (
-                this.app as unknown as { plugins: Plugins }
-            ).plugins.loadingPluginId as string | undefined;
+        const settings = this.ctx.getSettings();
 
-            if (loadingPluginId && typeof type === "string" && type.length > 0) {
-                const mode = this.getPluginMode(loadingPluginId);
-                const pluginSettings = getPluginSettings(loadingPluginId);
-                const isLazyOnView = mode === PLUGIN_MODE.LAZY_ON_VIEW;
+        viewRegistry.registerView = (type: string, creator: unknown) => {
+            const loadingId = (this.ctx.app as unknown as { plugins: Plugins })
+                .plugins.loadingPluginId as string | undefined;
+
+            if (loadingId && type) {
+                const mode = this.ctx.getPluginMode(loadingId);
+                const pluginSettings = settings.plugins[loadingId];
                 const isLazyWithUseView =
                     mode === PLUGIN_MODE.LAZY &&
                     pluginSettings?.lazyOptions?.useView === true;
 
-                if (isLazyOnView || isLazyWithUseView) {
-                    // Collect into the legacy lazyOnViews map (used by lazyOnView mode)
-                    if (!lazyOnViews[loadingPluginId]) {
-                        lazyOnViews[loadingPluginId] = [];
-                    }
-                    if (!lazyOnViews[loadingPluginId].includes(type)) {
-                        lazyOnViews[loadingPluginId].push(type);
+                if (isLazyWithUseView) {
+                    lazyOnViews[loadingId] ??= [];
+                    if (!lazyOnViews[loadingId].includes(type)) {
+                        lazyOnViews[loadingId].push(type);
                     }
 
-                    // Also update lazyOptions.viewTypes for lazy+useView plugins
                     if (isLazyWithUseView && pluginSettings?.lazyOptions) {
-                        if (!pluginSettings.lazyOptions.viewTypes) {
-                            pluginSettings.lazyOptions.viewTypes = [];
-                        }
+                        pluginSettings.lazyOptions.viewTypes ??= [];
                         if (!pluginSettings.lazyOptions.viewTypes.includes(type)) {
                             pluginSettings.lazyOptions.viewTypes.push(type);
                         }
@@ -82,144 +126,46 @@ class ViewRegistryInterceptor {
                 }
             }
 
-            return this.originalRegisterView!.apply(viewRegistry, [
-                type,
-                creator,
-            ]);
+            return this.originalRegisterView!.apply(viewRegistry, [type, creator]);
         };
 
-        return () => this.restore(viewRegistry);
+        return () => {
+            viewRegistry.registerView = this.originalRegisterView!;
+        };
     }
 
-    private restore(viewRegistry: {
-        registerView?: (type: string, creator: unknown) => unknown;
-    }) {
-        if (viewRegistry && this.originalRegisterView) {
-            viewRegistry.registerView = this.originalRegisterView;
-        }
-    }
-}
+    // -------------------------------------------------------------------------
+    // Plugin loading
+    // -------------------------------------------------------------------------
 
-/**
- * Helper to wait for plugin load completion
- */
-class PluginLoadWaiter {
-    constructor(private app: any) {}
-
-    /**
-     * Wait until all specified plugins have finished loading
-     */
-    async waitForAll(pluginIds: string[], timeoutMs: number): Promise<boolean> {
-        if (!pluginIds.length) return true;
-
-        try {
-            await pWaitFor(
-                () => pluginIds.every((id) => isPluginLoaded(this.app, id)),
-                { interval: 100, timeout: timeoutMs },
-            );
-            return true;
-        } catch (error) {
-            // timeout
+    private getLazyManifests(manifests: PluginManifest[]): PluginManifest[] {
+        return manifests.filter((plugin) => {
+            const mode = this.ctx.getPluginMode(plugin.id);
+            if (mode === PLUGIN_MODE.LAZY) {
+                return this.ctx.getSettings().plugins[plugin.id]?.lazyOptions?.useView === true;
+            }
             return false;
-        }
+        });
     }
 
-    /**
-     * Cancellable wait
-     */
-    async waitForAllCancellable(
-        pluginIds: string[],
-        timeoutMs: number,
-        isCancelled: () => boolean,
-    ): Promise<boolean> {
-        if (!pluginIds.length) return true;
-
-        const checkInterval = 100;
-        const startedAt = Date.now();
-
-        while (true) {
-            if (isCancelled()) return false;
-
-            if (pluginIds.every((id) => isPluginLoaded(this.app, id))) {
-                return true;
-            }
-
-            if (Date.now() - startedAt >= timeoutMs) {
-                return false;
-            }
-
-            await new Promise((resolve) => setTimeout(resolve, checkInterval));
-        }
-    }
-}
-
-/**
- * Helper to centralize persistence operations
- */
-class PersistenceManager {
-    constructor(
-        private app: App,
-        private ctx: PluginContext,
-        private registry: PluginRegistry,
-    ) {}
-
-    /**
-     * Persist lazyOnViews (remote + local)
-     */
-    async savelazyOnViews(
-        lazyOnViews: Record<string, string[]>,
-    ): Promise<void> {
-        const settings = this.ctx.getSettings();
-        settings.lazyOnViews = lazyOnViews;
-        await this.ctx.saveSettings();
-        // Also persist lazy-on-view registry locally per-vault
-        saveJSON(this.app, "lazyOnViews", lazyOnViews);
-    }
-
-    /**
-     * Write the community-plugins file
-     */
-    async writeCommunityPlugins(enabledPlugins: Set<string>): Promise<void> {
-        // Write whatever set the caller provides. Caller is responsible
-        // for filtering to the desired set (e.g. `keepEnabled` only).
-        await this.registry.writeCommunityPluginsFile(
-            [...enabledPlugins].sort((a, b) => a.localeCompare(b)),
-            this.ctx.getData().showConsoleLog,
-        );
-    }
-}
-
-/**
- * Plugin loader with progress indicator
- */
-class PluginBulkLoader {
-    constructor(
-        private ctx: PluginContext,
-        private commandCacheService: CommandCacheService,
-    ) {}
-
-    /**
-     * Load plugins sequentially and update progress
-     */
-    async loadWithProgress(
+    private async loadLazyPluginsWithProgress(
         manifests: PluginManifest[],
+        targetIds: Set<string> | null,
         progress: ProgressDialog | null,
         isCancelled: () => boolean,
-    ): Promise<void> {
-        for (let index = 0; index < manifests.length; index += 1) {
-            if (isCancelled()) break;
-
-            const plugin = manifests[index];
+    ) {
+        // 1. Enable each plugin sequentially
+        for (let i = 0; i < manifests.length; i++) {
+            if (isCancelled()) return;
+            const plugin = manifests[i];
             progress?.setStatus(`Loading ${plugin.name}`);
-            progress?.setProgress(index + 1);
+            progress?.setProgress(i + 1);
 
-            const loaded = isPluginLoaded(this.ctx.app, plugin.id);
-            const enabled = isPluginEnabled(
-                this.ctx.obsidianPlugins.enabledPlugins,
-                plugin.id,
-            );
+            const alreadyReady =
+                isPluginLoaded(this.ctx.app, plugin.id) &&
+                isPluginEnabled(this.ctx.obsidianPlugins.enabledPlugins, plugin.id);
 
-            if (!enabled || !loaded) {
+            if (!alreadyReady) {
                 try {
                     await this.ctx.obsidianPlugins.enablePlugin(plugin.id);
                 } catch (error) {
@@ -227,252 +173,113 @@ class PluginBulkLoader {
                 }
             }
         }
-    }
-
-    /**
-     * Rebuild the command cache
-     */
-    async rebuildCommandCache(
-        pluginIds?: string[],
-        progress?: ProgressDialog | null,
-        progressValue?: number,
-    ): Promise<void> {
-        progress?.setStatus("Rebuilding command cache…");
-        await this.commandCacheService.refreshCommandCache(pluginIds);
-        if (progress && progressValue !== undefined) {
-            progress.setProgress(progressValue);
-        }
-    }
-}
-
-/**
- * Manages plugin startup policies and lifecycle.
- * Handles lazy loading, view-based loading, and persistent plugin states with progress UI and cancellation support.
- */
-export class StartupPolicyService {
-    private mutex = new Mutex();
-    private viewRegistryInterceptor: ViewRegistryInterceptor;
-    private pluginLoadWaiter: PluginLoadWaiter;
-    private persistenceManager: PersistenceManager;
-    private pluginBulkLoader: PluginBulkLoader;
-
-    constructor(
-        private ctx: PluginContext,
-        commandCacheService: CommandCacheService,
-        registry: PluginRegistry,
-    ) {
-        this.viewRegistryInterceptor = new ViewRegistryInterceptor(
-            ctx.app,
-            (pluginId) => ctx.getPluginMode(pluginId),
-        );
-        this.pluginLoadWaiter = new PluginLoadWaiter(ctx.app);
-        this.persistenceManager = new PersistenceManager(
-            ctx.app,
-            ctx,
-            registry,
-        );
-        this.pluginBulkLoader = new PluginBulkLoader(ctx, commandCacheService);
-    }
-
-    /**
-     * Apply plugin startup policy with progress indicator and reload support.
-     * Serialized using debounce + mutex
-     */
-    public apply = debounce(async (pluginIds?: string[]) => {
-        await this.mutex.runExclusive(async () => {
-            await this.executeStartupPolicy(pluginIds);
-        });
-    }, 100);
-
-    private async executeStartupPolicy(
-        pluginIds?: string[],
-        externalProgress?: ProgressDialog | null,
-    ) {
-        const manifests = this.ctx.getManifests();
-        const targetPluginIds = pluginIds?.length ? new Set(pluginIds) : null;
-        const targetManifests = this.getTargetManifests(
-            manifests,
-            targetPluginIds,
-        );
-        const lazyManifests = this.getLazyManifests(targetManifests);
-
-        let cancelled = false;
-        // Use an externally supplied progress dialog when provided, otherwise create one.
-        const progress =
-            externalProgress ??
-            this.createProgressDialog(lazyManifests.length, () => {
-                cancelled = true;
-            });
-
-        if (externalProgress) {
-            // Ensure cancel from external dialog sets our cancelled flag and totals align.
-            externalProgress.setOnCancel(() => {
-                cancelled = true;
-            });
-            externalProgress.setTotal(lazyManifests.length + 2);
-        }
-
-        const lazyOnViews: Record<string, string[]> = {
-            ...(this.ctx.getSettings().lazyOnViews ?? {}),
-        };
-        const settings = this.ctx.getSettings();
-        const viewRegistryCleanup = this.viewRegistryInterceptor.intercept(
-            lazyOnViews,
-            (pluginId) => settings.plugins[pluginId],
-        );
-
-        try {
-            await this.loadLazyPluginsWithProgress(
-                lazyManifests,
-                targetPluginIds,
-                progress,
-                () => cancelled,
-            );
-        } finally {
-            await this.cleanupAndReload(
-                viewRegistryCleanup,
-                lazyOnViews,
-                !cancelled,
-                progress,
-            );
-        }
-    }
-
-    /**
-     * Apply startup policy but reuse an externally created ProgressDialog (optional).
-     * This allows callers to show a unified progress UI covering command cache rebuild + apply.
-     */
-    public async applyWithProgress(
-        progress: ProgressDialog | null,
-        pluginIds?: string[],
-    ) {
-        await this.mutex.runExclusive(async () => {
-            await this.executeStartupPolicy(pluginIds, progress);
-        });
-    }
-
-    private getTargetManifests(
-        manifests: PluginManifest[],
-        targetPluginIds: Set<string> | null,
-    ) {
-        return targetPluginIds
-            ? manifests.filter((plugin) => targetPluginIds.has(plugin.id))
-            : manifests;
-    }
-
-    private getLazyManifests(manifests: PluginManifest[]) {
-        // Load plugins that need view-type detection during the startup apply step:
-        //  - legacy `lazyOnView` plugins (always)
-        //  - `lazy` plugins that have lazyOptions.useView=true (need auto-detection too)
-        return manifests.filter((plugin) => {
-            const mode = this.ctx.getPluginMode(plugin.id);
-            if (mode === PLUGIN_MODE.LAZY_ON_VIEW) return true;
-            if (mode === PLUGIN_MODE.LAZY) {
-                const settings = this.ctx.getSettings();
-                return settings.plugins[plugin.id]?.lazyOptions?.useView === true;
-            }
-            return false;
-        });
-    }
-
-    private createProgressDialog(
-        total: number,
-        onCancel: () => void,
-    ): ProgressDialog {
-        const progress = new ProgressDialog(this.ctx.app, {
-            title: "Applying plugin startup policy",
-            total: total + 2,
-            cancellable: true,
-            cancelText: "Cancel",
-            onCancel,
-        });
-        progress.open();
-        return progress;
-    }
-
-    private async loadLazyPluginsWithProgress(
-        lazyManifests: PluginManifest[],
-        targetPluginIds: Set<string> | null,
-        progress: ProgressDialog | null,
-        isCancelled: () => boolean,
-    ) {
-        await this.pluginBulkLoader.loadWithProgress(
-            lazyManifests,
-            progress,
-            isCancelled,
-        );
 
         if (isCancelled()) return;
 
+        // 2. Wait for all to finish registering
         progress?.setStatus("Waiting for plugins to finish registering…");
-        const pluginIds = lazyManifests.map((plugin) => plugin.id);
-        await this.pluginLoadWaiter.waitForAllCancellable(
-            pluginIds,
-            15 * 1000,
+        await this.waitForPlugins(
+            manifests.map((p) => p.id),
+            15_000,
             isCancelled,
         );
-        progress?.setProgress(lazyManifests.length + 1);
+        progress?.setProgress(manifests.length + 1);
 
         if (isCancelled()) return;
 
-        await this.pluginBulkLoader.rebuildCommandCache(
-            targetPluginIds ? Array.from(targetPluginIds) : undefined,
-            progress,
-            lazyManifests.length + 2,
+        // 3. Rebuild command cache
+        progress?.setStatus("Rebuilding command cache…");
+        await this.commandCacheService.refreshCommandCache(
+            targetIds ? Array.from(targetIds) : undefined,
         );
+        progress?.setProgress(manifests.length + 2);
     }
+
+    /** Poll until all plugin IDs are loaded, or timeout / cancelled. */
+    private async waitForPlugins(
+        ids: string[],
+        timeoutMs: number,
+        isCancelled: () => boolean,
+    ): Promise<void> {
+        if (!ids.length) return;
+        const deadline = Date.now() + timeoutMs;
+        while (true) {
+            if (isCancelled() || ids.every((id) => isPluginLoaded(this.ctx.app, id))) return;
+            if (Date.now() >= deadline) return;
+            await new Promise((r) => setTimeout(r, 100));
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Cleanup & persistence
+    // -------------------------------------------------------------------------
 
     private async cleanupAndReload(
-        viewRegistryCleanup: () => void,
         lazyOnViews: Record<string, string[]>,
         shouldReload: boolean,
         progress: ProgressDialog | null,
+        stopIntercepting: () => void,
     ) {
-        viewRegistryCleanup();
+        stopIntercepting();
 
-        // Remove entries that are not lazyOnView (lazy+useView plugins store their
-        // view types in lazyOptions.viewTypes, not in the legacy lazyOnViews map)
-        for (const plugin of this.ctx.getManifests()) {
-            const mode = this.ctx.getPluginMode(plugin.id);
-            if (mode !== PLUGIN_MODE.LAZY_ON_VIEW) {
-                delete lazyOnViews[plugin.id];
-            }
-        }
-        await this.persistenceManager.savelazyOnViews(lazyOnViews);
+        // Persist lazyOnViews
+        const settings = this.ctx.getSettings();
+        settings.lazyOnViews = lazyOnViews;
+        await this.ctx.saveSettings();
+        saveJSON(this.ctx.app, "lazyOnViews", lazyOnViews);
 
-        // Keep only plugins with `keepEnabled` in the enabled list
-        const desiredEnabled = new Set<string>();
-        this.ctx.getManifests().forEach((plugin) => {
-            if (this.ctx.getPluginMode(plugin.id) === PLUGIN_MODE.ALWAYS_ENABLED) {
-                desiredEnabled.add(plugin.id);
-            }
-        });
+        // Compute the desired enabled set (always-enabled + self)
+        const desiredEnabled = new Set<string>(
+            this.ctx
+                .getManifests()
+                .filter((p) => this.ctx.getPluginMode(p.id) === PLUGIN_MODE.ALWAYS_ENABLED)
+                .map((p) => p.id),
+        );
         desiredEnabled.add(ON_DEMAND_PLUGIN_ID);
 
+        // Update in-memory enabled set
         this.ctx.obsidianPlugins.enabledPlugins.clear();
-        desiredEnabled.forEach((pluginId) => {
-            this.ctx.obsidianPlugins.enabledPlugins.add(pluginId);
-        });
+        desiredEnabled.forEach((id) => this.ctx.obsidianPlugins.enabledPlugins.add(id));
 
-        // Ensure only `keepEnabled` plugins (plus the on-demand plugin) are persisted.
-        const toPersist = new Set<string>(
-            [...desiredEnabled].filter(
-                (id) => this.ctx.getPluginMode(id) === PLUGIN_MODE.ALWAYS_ENABLED || id === ON_DEMAND_PLUGIN_ID,
-            ),
+        // Persist community-plugins file
+        const toPersist = [...desiredEnabled]
+            .filter(
+                (id) =>
+                    this.ctx.getPluginMode(id) === PLUGIN_MODE.ALWAYS_ENABLED ||
+                    id === ON_DEMAND_PLUGIN_ID,
+            )
+            .sort((a, b) => a.localeCompare(b));
+
+        await this.registry.writeCommunityPluginsFile(
+            toPersist,
+            this.ctx.getData().showConsoleLog,
         );
-
-        await this.persistenceManager.writeCommunityPlugins(toPersist);
 
         if (shouldReload) {
             try {
-                (
-                    this.ctx.app as unknown as { commands: Commands }
-                ).commands.executeCommandById("app:reload");
+                (this.ctx.app as unknown as { commands: Commands })
+                    .commands.executeCommandById("app:reload");
             } catch (error) {
                 logger.warn("Failed to reload app after apply", error);
             }
         }
 
         progress?.close();
+    }
+
+    // -------------------------------------------------------------------------
+    // UI helpers
+    // -------------------------------------------------------------------------
+
+    private openProgressDialog(total: number, onCancel: () => void): ProgressDialog {
+        const dialog = new ProgressDialog(this.ctx.app, {
+            title: "Applying plugin startup policy",
+            total: total + 2,
+            cancellable: true,
+            cancelText: "Cancel",
+            onCancel,
+        });
+        dialog.open();
+        return dialog;
     }
 }

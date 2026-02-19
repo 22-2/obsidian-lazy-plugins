@@ -156,7 +156,7 @@ export class ServiceContainer {
         // subsequent startup policy apply steps.
         const manifests = this.ctx.getManifests();
         const lazyCount = manifests.filter(
-            (p) => this.ctx.getPluginMode(p.id) === PLUGIN_MODE.LAZY_ON_VIEW,
+            (p) => this.ctx.getPluginMode(p.id) !== PLUGIN_MODE.ALWAYS_ENABLED && this.ctx.getPluginMode(p.id) !== PLUGIN_MODE.ALWAYS_DISABLED,
         ).length;
 
         const progress = new ProgressDialog(this.ctx.app, {
@@ -227,7 +227,7 @@ export class ServiceContainer {
             return;
         }
 
-        if (mode === PLUGIN_MODE.LAZY || mode === PLUGIN_MODE.LAZY_ON_VIEW) {
+        if (mode === PLUGIN_MODE.LAZY) {
             await this.commandCache.ensureCommandsCached(pluginId);
             if (this.ctx.obsidianPlugins.enabledPlugins.has(pluginId)) {
                 await this.ctx.obsidianPlugins.disablePlugin(pluginId);
