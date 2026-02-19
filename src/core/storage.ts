@@ -4,7 +4,6 @@
  */
 import log from "loglevel";
 import type { App } from "obsidian";
-import "obsidian-typings";
 import store from "store2";
 
 const logger = log.getLogger("OnDemandPlugin/Storage");
