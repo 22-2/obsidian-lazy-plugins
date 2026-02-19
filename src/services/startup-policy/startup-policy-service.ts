@@ -33,7 +33,10 @@ class ViewRegistryInterceptor {
      * Intercept ViewRegistry.registerView to record view registrations
      * for lazyOnView plugins
      */
-    intercept(lazyOnViews: Record<string, string[]>): () => void {
+    intercept(
+        lazyOnViews: Record<string, string[]>,
+        getPluginSettings: (pluginId: string) => { lazyOptions?: { useView?: boolean; viewTypes?: string[] } } | undefined,
+    ): () => void {
         const { viewRegistry } = this.app as unknown as {
             viewRegistry?: {
                 registerView?: (type: string, creator: unknown) => unknown;
@@ -50,17 +53,32 @@ class ViewRegistryInterceptor {
                 this.app as unknown as { plugins: Plugins }
             ).plugins.loadingPluginId as string | undefined;
 
-            if (
-                loadingPluginId &&
-                this.getPluginMode(loadingPluginId) === PLUGIN_MODE.LAZY_ON_VIEW &&
-                typeof type === "string" &&
-                type.length > 0
-            ) {
-                if (!lazyOnViews[loadingPluginId]) {
-                    lazyOnViews[loadingPluginId] = [];
-                }
-                if (!lazyOnViews[loadingPluginId].includes(type)) {
-                    lazyOnViews[loadingPluginId].push(type);
+            if (loadingPluginId && typeof type === "string" && type.length > 0) {
+                const mode = this.getPluginMode(loadingPluginId);
+                const pluginSettings = getPluginSettings(loadingPluginId);
+                const isLazyOnView = mode === PLUGIN_MODE.LAZY_ON_VIEW;
+                const isLazyWithUseView =
+                    mode === PLUGIN_MODE.LAZY &&
+                    pluginSettings?.lazyOptions?.useView === true;
+
+                if (isLazyOnView || isLazyWithUseView) {
+                    // Collect into the legacy lazyOnViews map (used by lazyOnView mode)
+                    if (!lazyOnViews[loadingPluginId]) {
+                        lazyOnViews[loadingPluginId] = [];
+                    }
+                    if (!lazyOnViews[loadingPluginId].includes(type)) {
+                        lazyOnViews[loadingPluginId].push(type);
+                    }
+
+                    // Also update lazyOptions.viewTypes for lazy+useView plugins
+                    if (isLazyWithUseView && pluginSettings?.lazyOptions) {
+                        if (!pluginSettings.lazyOptions.viewTypes) {
+                            pluginSettings.lazyOptions.viewTypes = [];
+                        }
+                        if (!pluginSettings.lazyOptions.viewTypes.includes(type)) {
+                            pluginSettings.lazyOptions.viewTypes.push(type);
+                        }
+                    }
                 }
             }
 
@@ -297,8 +315,11 @@ export class StartupPolicyService {
         const lazyOnViews: Record<string, string[]> = {
             ...(this.ctx.getSettings().lazyOnViews ?? {}),
         };
-        const viewRegistryCleanup =
-            this.viewRegistryInterceptor.intercept(lazyOnViews);
+        const settings = this.ctx.getSettings();
+        const viewRegistryCleanup = this.viewRegistryInterceptor.intercept(
+            lazyOnViews,
+            (pluginId) => settings.plugins[pluginId],
+        );
 
         try {
             await this.loadLazyPluginsWithProgress(
@@ -340,12 +361,18 @@ export class StartupPolicyService {
     }
 
     private getLazyManifests(manifests: PluginManifest[]) {
-        // Only legacy `lazyOnView` plugins need to be loaded during the
-        // startup apply step so we can detect view registrations. Regular
-        // `lazy` plugins should not be enabled at startup.
-        return manifests.filter(
-            (plugin) => this.ctx.getPluginMode(plugin.id) === PLUGIN_MODE.LAZY_ON_VIEW,
-        );
+        // Load plugins that need view-type detection during the startup apply step:
+        //  - legacy `lazyOnView` plugins (always)
+        //  - `lazy` plugins that have lazyOptions.useView=true (need auto-detection too)
+        return manifests.filter((plugin) => {
+            const mode = this.ctx.getPluginMode(plugin.id);
+            if (mode === PLUGIN_MODE.LAZY_ON_VIEW) return true;
+            if (mode === PLUGIN_MODE.LAZY) {
+                const settings = this.ctx.getSettings();
+                return settings.plugins[plugin.id]?.lazyOptions?.useView === true;
+            }
+            return false;
+        });
     }
 
     private createProgressDialog(
@@ -403,9 +430,11 @@ export class StartupPolicyService {
     ) {
         viewRegistryCleanup();
 
-        // Remove entries that are not lazyOnView
+        // Remove entries that are not lazyOnView (lazy+useView plugins store their
+        // view types in lazyOptions.viewTypes, not in the legacy lazyOnViews map)
         for (const plugin of this.ctx.getManifests()) {
-            if (this.ctx.getPluginMode(plugin.id) !== PLUGIN_MODE.LAZY_ON_VIEW) {
+            const mode = this.ctx.getPluginMode(plugin.id);
+            if (mode !== PLUGIN_MODE.LAZY_ON_VIEW) {
                 delete lazyOnViews[plugin.id];
             }
         }
