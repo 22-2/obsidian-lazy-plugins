@@ -1,4 +1,5 @@
 import { expect, test } from "obsidian-e2e-toolkit";
+import OnDemandPlugin from "src/main";
 import { ensureBuilt, pluginUnderTestId, targetPluginId, useOnDemandPlugins } from "./test-utils";
 
 useOnDemandPlugins();
@@ -9,14 +10,14 @@ test("apply changes updates startup policy", async ({ obsidian }) => {
     await obsidian.waitReady();
 
     const pluginHandle = await obsidian.plugin(pluginUnderTestId);
-    const result = await pluginHandle.evaluate(async (plugin, pluginId) => {
+    const result = await pluginHandle.evaluate(async (plugin: OnDemandPlugin, pluginId) => {
         const beforeUpdatedAt = plugin.data?.commandCacheUpdatedAt ?? null;
         const original = app.commands.executeCommandById;
         app.commands.executeCommandById = () => true;
 
         try {
             await plugin.updatePluginSettings(pluginId, "lazy");
-            await plugin.applyStartupPolicy([pluginId]);
+            await plugin.applyStartupPolicyAndRestart([pluginId]);
         } finally {
             app.commands.executeCommandById = original;
         }
@@ -109,41 +110,45 @@ test("lazyOnView loads plugin on view activation", async ({ obsidian }) => {
     expect(enabled).toBe(true);
 });
 
-test("reRegisterLazyCommandsOnDisable keeps command wrappers", async ({ obsidian }) => {
+test("enabling disabled plugin syncs settings to keepEnabled", async ({ obsidian }) => {
     if (!ensureBuilt()) return;
 
     await obsidian.waitReady();
 
     const pluginHandle = await obsidian.plugin(pluginUnderTestId);
+
+    // 1. Set the target plugin to disabled
     await pluginHandle.evaluate(async (plugin, pluginId) => {
         const original = app.commands.executeCommandById;
         app.commands.executeCommandById = () => true;
 
         try {
-            plugin.settings.reRegisterLazyCommandsOnDisable = true;
-            await plugin.saveSettings();
-            await plugin.updatePluginSettings(pluginId, "lazy");
-            await plugin.rebuildAndApplyCommandCache({ force: true });
+            await plugin.updatePluginSettings(pluginId, "alwaysDisabled");
         } finally {
             app.commands.executeCommandById = original;
         }
     }, targetPluginId);
 
-    const commandId = await obsidian.page.evaluate((id) => {
-        return Object.keys(app.commands.commands).find((cmd) =>
-            cmd.startsWith(`${id}:`),
-        );
+    // 2. Enable via Obsidian UI (triggers the patch)
+    await obsidian.page.evaluate((id) => app.plugins.enablePlugin(id), targetPluginId);
+
+    // Wait for enable to complete
+    const enableDeadline = Date.now() + 8000;
+    while (Date.now() < enableDeadline) {
+        if (await obsidian.isPluginEnabled(targetPluginId)) break;
+        await new Promise((r) => setTimeout(r, 200));
+    }
+
+    // 3. Verify settings synced to "keepEnabled"
+    const result = await pluginHandle.evaluate(async (plugin, pluginId) => {
+        return {
+            mode: plugin.settings?.plugins?.[pluginId]?.mode ?? null,
+            userConfigured: plugin.settings?.plugins?.[pluginId]?.userConfigured ?? false,
+        };
     }, targetPluginId);
 
-    expect(commandId).toBeTruthy();
-
-    await obsidian.page.evaluate((id) => app.plugins.disablePlugin(id), targetPluginId);
-
-    const stillExists = await obsidian.page.evaluate((cmd) => {
-        return Boolean(app.commands.commands[cmd]);
-    }, commandId as string);
-
-    expect(stillExists).toBe(true);
+    expect(result.mode).toBe("alwaysEnabled");
+    expect(result.userConfigured).toBe(true);
 });
 
 test("commandCacheVersions updates on force rebuild", async ({ obsidian }) => {
@@ -187,14 +192,14 @@ test("apply changes writes community-plugins.json", async ({ obsidian }) => {
     await obsidian.waitReady();
 
     const pluginHandle = await obsidian.plugin(pluginUnderTestId);
-    await pluginHandle.evaluate(async (plugin, pluginId) => {
+    await pluginHandle.evaluate(async (plugin: OnDemandPlugin, pluginId) => {
         const original = app.commands.executeCommandById;
         app.commands.executeCommandById = () => true; // prevent real reload
 
         try {
             // Make plugin keepEnabled so it should be present in the file
-            await plugin.updatePluginSettings(pluginId, "keepEnabled");
-            await plugin.applyStartupPolicy([pluginId]);
+            await plugin.updatePluginSettings(pluginId, "alwaysEnabled");
+            await plugin.applyStartupPolicyAndRestart([pluginId]);
         } finally {
             app.commands.executeCommandById = original;
         }
@@ -224,7 +229,7 @@ test("automatic view type detection during Apply changes", async ({ obsidian }) 
     await obsidian.waitReady();
 
     const pluginHandle = await obsidian.plugin(pluginUnderTestId);
-    const detected = await pluginHandle.evaluate(async (plugin, pluginId) => {
+    const detected = await pluginHandle.evaluate(async (plugin: OnDemandPlugin, pluginId) => {
         const original = app.commands.executeCommandById;
         app.commands.executeCommandById = () => true; // prevent reload
 
@@ -236,7 +241,7 @@ test("automatic view type detection during Apply changes", async ({ obsidian }) 
             }
 
             await plugin.updatePluginSettings(pluginId, "lazyOnView");
-            await plugin.applyStartupPolicy([pluginId]);
+            await plugin.applyStartupPolicyAndRestart([pluginId]);
 
             return plugin.settings.lazyOnViews?.[pluginId] ?? null;
         } finally {

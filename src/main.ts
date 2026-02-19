@@ -3,6 +3,7 @@ import type { PluginManifest } from "obsidian";
 import { Plugin } from "obsidian";
 import { createPluginContext } from "./core/plugin-context";
 import type { DeviceSettings, LazySettings, PluginMode } from "./core/types";
+import { PLUGIN_MODE } from "./core/types";
 import { toggleLoggerBy } from "./core/utils";
 import { ServiceContainer } from "./services/service-container";
 import { SettingsTab } from "./services/settings/settings-tab";
@@ -15,7 +16,7 @@ export default class OnDemandPlugin extends Plugin {
     device = "desktop/global";
     manifests: PluginManifest[] = [];
 
-    private container!: ServiceContainer;
+    container!: ServiceContainer;
 
     async onload() {
         const ctx = createPluginContext(this);
@@ -44,7 +45,8 @@ export default class OnDemandPlugin extends Plugin {
         await this.container.settingsService.load();
         this.data = this.container.settingsService.data;
         this.settings = this.container.settingsService.settings;
-        this.device = this.container.settingsService.device;
+        const profileId = this.container.settingsService.currentProfileId;
+        this.device = this.container.settingsService.data.profiles[profileId]?.name ?? "Unknown";
     }
 
     async saveSettings() {
@@ -69,13 +71,9 @@ export default class OnDemandPlugin extends Plugin {
                 continue;
             }
 
-            if (
-                !current.userConfigured &&
-                current.mode === "disabled" &&
-                this.isPluginEnabledOnDisk(plugin.id)
-            ) {
+            if (!current.userConfigured && current.mode === PLUGIN_MODE.ALWAYS_DISABLED && this.isPluginEnabledOnDisk(plugin.id)) {
                 this.settings.plugins[plugin.id] = {
-                    mode: "keepEnabled",
+                    mode: PLUGIN_MODE.ALWAYS_ENABLED,
                     userConfigured: false,
                 };
                 hasChanges = true;
@@ -93,23 +91,27 @@ export default class OnDemandPlugin extends Plugin {
         await this.container.applyPluginState(pluginId);
     }
 
+    async switchProfile(profileId: string) {
+        await this.container.settingsService.switchProfile(profileId);
+        this.settings = this.container.settingsService.settings;
+        await this.saveSettings();
+        await this.applyStartupPolicyAndRestart();
+    }
+
     updateManifests() {
         this.container.registry.updateManifests();
         this.manifests = this.container.registry.manifests;
     }
 
     getPluginMode(pluginId: string): PluginMode {
-        return (
-            this.settings.plugins?.[pluginId]?.mode ??
-            this.getDefaultModeForPlugin(pluginId)
-        );
+        return this.settings.plugins?.[pluginId]?.mode ?? this.getDefaultModeForPlugin(pluginId);
     }
 
     getDefaultModeForPlugin(pluginId: string): PluginMode {
         if (this.isPluginEnabledOnDisk(pluginId)) {
-            return "keepEnabled";
+            return PLUGIN_MODE.ALWAYS_ENABLED;
         }
-        return "disabled";
+        return PLUGIN_MODE.ALWAYS_DISABLED;
     }
 
     isPluginEnabledOnDisk(pluginId: string): boolean {
@@ -126,11 +128,7 @@ export default class OnDemandPlugin extends Plugin {
         pluginIds: string[],
         options?: {
             force?: boolean;
-            onProgress?: (
-                current: number,
-                total: number,
-                plugin: PluginManifest,
-            ) => void;
+            onProgress?: (current: number, total: number, plugin: PluginManifest) => void;
         },
     ) {
         await this.container.rebuildCommandCache(pluginIds, options);
@@ -138,12 +136,10 @@ export default class OnDemandPlugin extends Plugin {
 
     getCommandPluginId(commandId: string): string | null {
         const [prefix] = commandId.split(":");
-        return this.manifests.some((plugin) => plugin.id === prefix)
-            ? prefix
-            : null;
+        return this.manifests.some((plugin) => plugin.id === prefix) ? prefix : null;
     }
 
-    async applyStartupPolicy(pluginIds?: string[]) {
+    async applyStartupPolicyAndRestart(pluginIds?: string[]) {
         await this.container.applyStartupPolicy(pluginIds);
     }
 

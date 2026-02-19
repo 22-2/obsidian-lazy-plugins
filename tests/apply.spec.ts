@@ -1,4 +1,5 @@
 import { expect, test } from "obsidian-e2e-toolkit";
+import OnDemandPlugin from "src/main";
 import { ensureBuilt, pluginUnderTestId, targetPluginId, useOnDemandPlugins } from "./test-utils";
 
 useOnDemandPlugins();
@@ -9,14 +10,14 @@ test("apply changes writes community-plugins.json", async ({ obsidian }) => {
     await obsidian.waitReady();
 
     const pluginHandle = await obsidian.plugin(pluginUnderTestId);
-    await pluginHandle.evaluate(async (plugin, pluginId) => {
+    await pluginHandle.evaluate(async (plugin: OnDemandPlugin, pluginId) => {
         const original = app.commands.executeCommandById;
         app.commands.executeCommandById = () => true; // prevent real reload
 
         try {
             // Make plugin keepEnabled so it should be present in the file
-            await plugin.updatePluginSettings(pluginId, "keepEnabled");
-            await plugin.applyStartupPolicy([pluginId]);
+            await plugin.updatePluginSettings(pluginId, "alwaysEnabled");
+            await plugin.applyStartupPolicyAndRestart([pluginId]);
         } finally {
             app.commands.executeCommandById = original;
         }
@@ -46,7 +47,7 @@ test("automatic view type detection during Apply changes", async ({ obsidian }) 
     await obsidian.waitReady();
 
     const pluginHandle = await obsidian.plugin(pluginUnderTestId);
-    const detected = await pluginHandle.evaluate(async (plugin, pluginId) => {
+    const detected = await pluginHandle.evaluate(async (plugin: OnDemandPlugin, pluginId) => {
         const original = app.commands.executeCommandById;
         app.commands.executeCommandById = () => true; // prevent reload
 
@@ -58,7 +59,7 @@ test("automatic view type detection during Apply changes", async ({ obsidian }) 
             }
 
             await plugin.updatePluginSettings(pluginId, "lazyOnView");
-            await plugin.applyStartupPolicy([pluginId]);
+            await plugin.applyStartupPolicyAndRestart([pluginId]);
 
             return plugin.settings.lazyOnViews?.[pluginId] ?? null;
         } finally {

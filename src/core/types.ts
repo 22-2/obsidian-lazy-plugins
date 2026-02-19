@@ -26,7 +26,6 @@ export interface FileActivationCriteria {
 export interface DeviceSettings {
     // defaultMode: PluginMode;
     showDescriptions: boolean;
-    reRegisterLazyCommandsOnDisable: boolean;
     plugins: { [pluginId: string]: PluginSettings };
     lazyOnViews: { [pluginId: string]: string[] };
     lazyOnFiles: { [pluginId: string]: FileActivationCriteria };
@@ -35,27 +34,51 @@ export interface DeviceSettings {
 export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
     // defaultMode: "disabled",
     showDescriptions: true,
-    reRegisterLazyCommandsOnDisable: true,
     plugins: {},
     lazyOnViews: {},
     lazyOnFiles: {},
 };
 
+// Settings per profile
+export interface Profile {
+    id: string;
+    name: string;
+    settings: DeviceSettings;
+}
+
 // Global settings for the plugin
 export interface LazySettings {
-    dualConfigs: boolean;
     showConsoleLog: boolean;
-    desktop: DeviceSettings;
-    mobile?: DeviceSettings;
+
+    // Profile Management
+    profiles: Record<string, Profile>;
+    desktopProfileId: string;
+    mobileProfileId: string;
+
+    // Command Cache (Global)
     commandCache?: CommandCache;
     commandCacheVersions?: CommandCacheVersions;
     commandCacheUpdatedAt?: number;
+
+    // Legacy fields for migration (optional)
+    dualConfigs?: boolean;
+    desktop?: DeviceSettings;
+    mobile?: DeviceSettings;
 }
 
+export const DEFAULT_PROFILE_ID = "Default";
+
 export const DEFAULT_SETTINGS: LazySettings = {
-    dualConfigs: false,
     showConsoleLog: false,
-    desktop: DEFAULT_DEVICE_SETTINGS,
+    profiles: {
+        [DEFAULT_PROFILE_ID]: {
+            id: DEFAULT_PROFILE_ID,
+            name: "Default",
+            settings: DEFAULT_DEVICE_SETTINGS,
+        },
+    },
+    desktopProfileId: DEFAULT_PROFILE_ID,
+    mobileProfileId: DEFAULT_PROFILE_ID,
 };
 
 export interface CachedCommandEntry {
@@ -67,17 +90,23 @@ export interface CachedCommandEntry {
 export type CommandCache = Record<string, CachedCommandEntry[]>;
 export type CommandCacheVersions = Record<string, string>;
 
-export type PluginMode =
-    | "disabled"
-    | "lazy"
-    | "keepEnabled"
-    | "lazyOnView"
-    | "lazyOnLayoutReady";
+export const PLUGIN_MODE = {
+    ALWAYS_DISABLED: "alwaysDisabled",
+    LAZY: "lazy",
+    ALWAYS_ENABLED: "alwaysEnabled",
+    /**
+     * @deprecated
+     */
+    LAZY_ON_VIEW: "lazyOnView",
+    LAZY_ON_LAYOUT_READY: "lazyOnLayoutReady",
+} as const;
+
+export type PluginMode = (typeof PLUGIN_MODE)[keyof typeof PLUGIN_MODE];
 
 export const PluginModes: Record<PluginMode, string> = {
-    disabled: "⛔ Always disabled",
-    lazy: "Lazy on demand",
-    lazyOnView: "Lazy on command/view (legacy)",
-    lazyOnLayoutReady: "Lazy on layout ready",
-    keepEnabled: "✅ Always enabled",
+    [PLUGIN_MODE.ALWAYS_DISABLED]: "⛔ Always disabled",
+    [PLUGIN_MODE.LAZY]: "Lazy on demand",
+    [PLUGIN_MODE.LAZY_ON_VIEW]: "Lazy on command/view (legacy)",
+    [PLUGIN_MODE.LAZY_ON_LAYOUT_READY]: "Lazy on layout ready",
+    [PLUGIN_MODE.ALWAYS_ENABLED]: "✅ Always enabled",
 };
